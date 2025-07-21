@@ -35,7 +35,7 @@ def date_and_street_extractor(x):
         x['MainStreet'] = ' '
     return x
 
-def fix_cover_id(x):
+def fix_url(x):
     x = x[-8:]
     return x
 
@@ -181,7 +181,7 @@ if problem:
 
 df = df.apply(date_and_street_extractor, axis=1)
 
-df['CoverId'] = df['CoverId'].apply(fix_cover_id)
+df['url'] = df['url'].apply(fix_url)
 
 df['ModifiedDate'] = df['CreatedTime']
 df['Disabled'] = 0
@@ -196,10 +196,11 @@ df['phone'] = df['phone'].map(fa_to_en)
 df['phone'] = df['phone'].astype('string')
 df['UserId'] = df['phone']
 df['Coordinates'] = None
+df['CoverId'] = None
 df['CreatedBy'] = df['phone']
 df['Code'] = df['id']
 
-new_order = ['id', 'Title', 'Description', 'DepositCategoryId', 'PropertyTypeId', 'OldId', 'StatusId', 'UserId', 'CityId', 'CoverId', 'RegionId', 'Coordinates', 'CreatedTime', 'ModifiedDate', 'CreatedBy', 'ModifiedBy', 'Disabled', 'IsDeleted', 'MainStreet', 'Price', 'RentalPrice', 'Code']
+new_order = ['id', 'Title', 'Description', 'DepositCategoryId', 'PropertyTypeId', 'OldId', 'StatusId', 'UserId', 'CityId', 'CoverId', 'url', 'RegionId', 'Coordinates', 'CreatedTime', 'ModifiedDate', 'CreatedBy', 'ModifiedBy', 'Disabled', 'IsDeleted', 'MainStreet', 'Price', 'RentalPrice', 'Code']
 df_new = df[new_order]
 
 df_custom_field = pd.DataFrame(columns=[
@@ -254,7 +255,6 @@ for index, row in df.iterrows():
 df_custom_field = pd.concat([df_custom_field, pd.DataFrame(new_rows)], ignore_index=True)
 
 df_custom_field['CustomFieldId'] = df_custom_field['CustomFieldId'].astype('int')
-# df_custom_field['CustomFieldOptionId'] = df_custom_field['CustomFieldOptionId'].astype('int')
 df_custom_field['DepositId'] = df_custom_field['DepositId'].astype('int')
 df_custom_field['Disabled'] = df_custom_field['Disabled'].astype('int')
 df_custom_field['IsDeleted'] = df_custom_field['IsDeleted'].astype('int')
