@@ -7,7 +7,6 @@ from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 import math
 
-
 MONGO_URI = "mongodb://appuser:apppassword@172.16.36.111:27017/delta-datasets"
 MONGO_DB = "delta-datasets"
 MONGO_COLLECTION = "transform.test9"
