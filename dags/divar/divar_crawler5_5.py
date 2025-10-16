@@ -1,23 +1,23 @@
-from datetime import datetime, timedelta
 import json
 import re
 import time
 from collections import deque
+from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
 import httpx
-from bs4 import BeautifulSoup
-from urllib.robotparser import RobotFileParser
+import redis
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.sensors.base import BaseSensorOperator
 from airflow.utils.decorators import apply_defaults
-import redis
+from bs4 import BeautifulSoup
+from curl2json.parser import parse_curl
+from kafka import KafkaConsumer, KafkaProducer
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
-from kafka import KafkaProducer, KafkaConsumer
 
-from curl2json.parser import parse_curl
 # from redisbloom.client import Client as RedisBloom
 
 # crawler
