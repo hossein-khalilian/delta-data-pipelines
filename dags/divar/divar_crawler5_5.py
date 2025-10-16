@@ -7,6 +7,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
+import numpy as np
 import redis
 from airflow import DAG
 from airflow.operators.python import PythonOperator
