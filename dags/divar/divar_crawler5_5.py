@@ -132,8 +132,6 @@ def extract_tokens(**kwargs):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                print(f"صفحه دریافت شد{pages_processed}: {e}")
-                # last_page = data.get("pagination_data", {}).get("last_page") or 0
             except Exception as e:
                 print(f"❌ خطا در درخواست صفحه {pages_processed}: {e}")
                 break
@@ -155,7 +153,8 @@ def extract_tokens(**kwargs):
             # توکن‌ها
             widgets = data.get("list_widgets", []) or []
             tokens = [w.get("data", {}).get("token") for w in widgets if w.get("data", {}).get("token")]
-            print ("توکن یافت شد ")
+            for t in tokens:
+                print(f"🔹 توکن یافت شد: {t}")
             if not tokens:
                 print("⛔️ هیچ توکنی یافت نشد، توقف.")
                 break
