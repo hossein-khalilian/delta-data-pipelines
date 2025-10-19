@@ -1,0 +1,7 @@
+apache-airflow==3.1.0
+beautifulsoup4==4.14.2
+curl2json==0.1.0
+httpx==0.28.1
+kafka_python==2.2.15
+pymongo==4.15.3
+redis==3.5.3
