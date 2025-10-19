@@ -1,5 +1,3 @@
-apache-airflow==2.10.4
-curl2json==0.1.0
 httpx==0.28.1
 kafka_python==2.2.15
 pymongo==4.15.1
