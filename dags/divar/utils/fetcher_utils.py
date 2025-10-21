@@ -13,6 +13,8 @@ from pymongo.errors import DuplicateKeyError
 from divar.utils.transform import transform_json_to_doc
 from utils.config import config
 
+DIVAR_API_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
+
 
 # ETL for fetch DAG
 class KafkaMessageSensor(BaseSensorOperator):
@@ -83,7 +85,7 @@ def consume_and_fetch(**kwargs):
         for topic_partition, partition_messages in messages.items():
             for message in partition_messages:
                 token = message.value
-                url = config["divar_api_url"].format(token)
+                url = DIVAR_API_URL.format(token=token)
                 try:
                     response = client.get(url)
                     response.raise_for_status()
