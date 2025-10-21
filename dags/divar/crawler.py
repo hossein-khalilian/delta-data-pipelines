@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from crawler import extract_tokens, filter_tokens, produce_to_kafka
+from divar.utils.crawler_utils import extract_tokens, filter_tokens, produce_to_kafka
 
 # DAGs
 default_args = {
@@ -15,7 +15,7 @@ default_args = {
 }
 
 producer_dag = DAG(
-    "divar_crawler25",
+    "divar_crawler",
     default_args=default_args,
     description="استخراج 100 توکن دیوار، فیلتر با بلوم، و ارسال به کافکا هر 5 دقیقه",
     schedule_interval="*/5 * * * *",

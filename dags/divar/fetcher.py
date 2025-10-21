@@ -3,7 +3,12 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from fetcher import KafkaMessageSensor, consume_and_fetch, transform_data, store_to_mongo
+from divar.utils.fetcher_utils import (
+    KafkaMessageSensor,
+    consume_and_fetch,
+    store_to_mongo,
+    transform_data,
+)
 
 # DAGs
 default_args = {
@@ -15,7 +20,7 @@ default_args = {
 }
 
 consumer_dag = DAG(
-    "divar_fetch25",
+    "divar_fetcher",
     default_args=default_args,
     description="مصرف یک توکن از کافکا، دریافت، تبدیل و ذخیره در MongoDB هر 5 دقیقه",
     schedule_interval="*/5 * * * *",

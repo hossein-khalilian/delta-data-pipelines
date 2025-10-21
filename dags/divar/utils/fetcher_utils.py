@@ -1,20 +1,20 @@
-from datetime import datetime
 import json
 import re
 import time
+from datetime import datetime
 
 import httpx
 from airflow.sensors.base import BaseSensorOperator
 from airflow.utils.decorators import apply_defaults
+from kafka import KafkaConsumer, KafkaProducer
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
-from kafka import KafkaProducer, KafkaConsumer
 
-from config import config 
+from divar.utils.transform import transform_json_to_doc
+from utils.config import config
 
-from transform import transform_json_to_doc
 
-# ETL for fetch DAG 
+# ETL for fetch DAG
 class KafkaMessageSensor(BaseSensorOperator):
     @apply_defaults
     def __init__(self, *args, **kwargs):
@@ -39,14 +39,17 @@ class KafkaMessageSensor(BaseSensorOperator):
             if has_messages:
                 print(f"✅ پیام جدیدی در تاپیک '{self.topic}' پیدا شد.")
             else:
-                print(f"⚠️ هیچ پیامی در تاپیک '{self.topic}' یافت نشد. منتظر پیام جدید می‌مانم...")
+                print(
+                    f"⚠️ هیچ پیامی در تاپیک '{self.topic}' یافت نشد. منتظر پیام جدید می‌مانم..."
+                )
 
             return has_messages
 
         except Exception as e:
             print(f"❌ خطا در بررسی پیام‌های Kafka: {e}")
             return False
-    
+
+
 def consume_and_fetch(**kwargs):
     consumer = KafkaConsumer(
         config["kafka_topic"],
@@ -56,7 +59,7 @@ def consume_and_fetch(**kwargs):
         group_id="divar_consumer_group",
         value_deserializer=lambda x: json.loads(x.decode("utf-8")),
     )
-    messages = consumer.poll(timeout_ms=10000, max_records=20)  
+    messages = consumer.poll(timeout_ms=10000, max_records=20)
     consumer.commit()
     consumer.close()
 
@@ -65,7 +68,7 @@ def consume_and_fetch(**kwargs):
         "verify": True,
         "headers": {"User-Agent": config["user_agent_default"]},
     }
-    
+
     with httpx.Client(**client_params) as client:
         # دریافت کوکی‌ها
         try:
@@ -93,13 +96,16 @@ def consume_and_fetch(**kwargs):
                     continue  # ادامه با توکن بعدی
 
     if fetched_data:
-        kwargs['ti'].xcom_push(key='fetched_data', value=fetched_data)
+        kwargs["ti"].xcom_push(key="fetched_data", value=fetched_data)
         print(f"دریافت شد: {len(fetched_data)} توکن پردازش شد")
     else:
         print("هیچ پیامی در کافکا یافت نشد.")
-        
+
+
 def transform_data(**kwargs):
-    fetched_data = kwargs['ti'].xcom_pull(key='fetched_data', task_ids='consume_and_fetch')
+    fetched_data = kwargs["ti"].xcom_pull(
+        key="fetched_data", task_ids="consume_and_fetch"
+    )
     if not fetched_data:
         print("هیچ داده‌ای برای تبدیل وجود ندارد.")
         return
@@ -118,10 +124,13 @@ def transform_data(**kwargs):
             print(f"خطا در تبدیل JSON برای {token}: {e}")
             continue
 
-    kwargs['ti'].xcom_push(key='transformed_data', value=transformed_data)
-    
+    kwargs["ti"].xcom_push(key="transformed_data", value=transformed_data)
+
+
 def store_to_mongo(**kwargs):
-    transformed_data = kwargs['ti'].xcom_pull(key='transformed_data', task_ids='transform_data')
+    transformed_data = kwargs["ti"].xcom_pull(
+        key="transformed_data", task_ids="transform_data"
+    )
     if not transformed_data:
         print("هیچ داده‌ای برای ذخیره در MongoDB وجود ندارد.")
         return
@@ -134,7 +143,9 @@ def store_to_mongo(**kwargs):
         for transformed in transformed_data:
             try:
                 collection.insert_one(transformed)
-                print(f"ذخیره شد: داده برای توکن {transformed['post_token']} در MongoDB")
+                print(
+                    f"ذخیره شد: داده برای توکن {transformed['post_token']} در MongoDB"
+                )
             except DuplicateKeyError:
                 print(f"تکراری: توکن {transformed['post_token']} قبلاً ذخیره شده است.")
             except Exception as e:
