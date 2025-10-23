@@ -3,12 +3,12 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from divar.utils.fetcher_utils import (
-    KafkaMessageSensor,
-    consume_and_fetch,
-    store_to_mongo,
-    transform_data,
-)
+from divar.utils.divar_fetcher import consume_and_fetch
+# from utils.divar_fetcher import consume_and_fetch
+from divar.utils.divar_fetcher import transform
+
+from utils.kafka_utils import KafkaMessageSensor
+from utils.mongodb_utils import store_to_mongo
 
 # DAGs
 default_args = {
@@ -20,14 +20,14 @@ default_args = {
 }
 
 consumer_dag = DAG(
-    "divar_fetcher",
+    "divar_fetcher2",
     default_args=default_args,
-    description="مصرف یک توکن از کافکا، دریافت، تبدیل و ذخیره در MongoDB هر 5 دقیقه",
-    schedule_interval="*/5 * * * *",
+    description="consume and fetch",
+    schedule_interval="*/3 * * * *",
     catchup=False,
 )
 
-# --- تسک‌های DAG مصرف‌کننده ---
+# Consumer DAG tasks 
 kafka_sensor = KafkaMessageSensor(
     task_id="kafka_message_sensor",
     poke_interval=60,
@@ -43,8 +43,8 @@ consume_fetch_task = PythonOperator(
 )
 
 transform_task = PythonOperator(
-    task_id="transform_data",
-    python_callable=transform_data,
+    task_id="transform",
+    python_callable=transform,
     provide_context=True,
     dag=consumer_dag,
 )
@@ -56,5 +56,5 @@ store_task = PythonOperator(
     dag=consumer_dag,
 )
 
-#  گراف DAG مصرف‌کننده
+#  Consumer DAG graph
 kafka_sensor >> consume_fetch_task >> transform_task >> store_task

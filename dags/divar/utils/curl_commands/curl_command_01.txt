@@ -1,0 +1,4 @@
+curl 'https://api.divar.ir/v8/postlist/w/search' \
+  --compressed \
+  -X POST \
+  --data-raw '{"city_ids":["1"],"pagination_data":{"@type":"type.googleapis.com/post_list.PaginationData","page":0,"layer_page":0,"search_bookmark_info":{"alert_state":{}}},"search_data":{"form_data":{"data":{"category":{"str":{"value":"apartment-sell"}}}},"server_payload":{"@type":"type.googleapis.com/widgets.SearchData.ServerPayload","additional_form_data":{"data":{"sort":{"str":{"value":"sort_date"}}}}}}}'
