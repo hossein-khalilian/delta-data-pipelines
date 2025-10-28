@@ -3,10 +3,8 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from divar.utils.divar_fetcher import consume_and_fetch
 # from utils.divar_fetcher import consume_and_fetch
-from divar.utils.divar_fetcher import transform
-
+from divar.utils.divar_fetcher import consume_and_fetch, transform
 from utils.kafka_utils import KafkaMessageSensor
 from utils.mongodb_utils import store_to_mongo
 
@@ -20,14 +18,14 @@ default_args = {
 }
 
 consumer_dag = DAG(
-    "divar_fetcher2",
+    "divar_fetcher",
     default_args=default_args,
     description="consume and fetch",
     schedule_interval="*/3 * * * *",
     catchup=False,
 )
 
-# Consumer DAG tasks 
+# Consumer DAG tasks
 kafka_sensor = KafkaMessageSensor(
     task_id="kafka_message_sensor",
     poke_interval=60,
