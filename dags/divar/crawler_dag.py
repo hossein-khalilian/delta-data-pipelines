@@ -15,7 +15,7 @@ default_args = {
 }
 
 producer_dag = DAG(
-    "divar_crawler2",
+    "divar_crawler",
     default_args=default_args,
     description="extract tokens",
     schedule_interval="*/5 * * * *",

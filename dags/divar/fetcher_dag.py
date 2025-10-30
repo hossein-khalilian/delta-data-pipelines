@@ -17,7 +17,7 @@ default_args = {
 }
 
 consumer_dag = DAG(
-    "divar_fetcher2",
+    "divar_fetcher",
     default_args=default_args,
     description="consume and fetch",
     schedule_interval="*/3 * * * *",
