@@ -5,10 +5,12 @@ from datetime import datetime, timedelta
 import httpx
 import redis
 from curl2json.parser import parse_curl
-from kafka import KafkaConsumer, KafkaProducer
+# from kafka import KafkaConsumer, KafkaProducer
 
 from utils.config import config
 
+import asyncio
+from aio_pika import Message, connect_robust
 
 # ETL for crawler DAG
 def extract_tokens(**kwargs):
@@ -159,17 +161,46 @@ def filter_tokens(**kwargs):
     print(f"Transferred: {len(tokens)} tokens to XCom")
 
 
-def produce_to_kafka(**kwargs):
+# def produce_to_kafka(**kwargs):
+#     tokens = kwargs["ti"].xcom_pull(key="filtered_tokens", task_ids="filter_tokens")
+#     if not tokens:
+#         print("No new tokens to send to Kafka.")
+#         return
+
+#     producer = KafkaProducer(
+#         bootstrap_servers=config["kafka_bootstrap_servers"],
+#         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+#     )
+#     for token in tokens:
+#         producer.send(config["kafka_topic"], token)
+#     producer.flush()
+#     print(f"Sent: {len(tokens)} tokens to Kafka")
+
+async def publish_tokens(tokens):
+    connection = await connect_robust(
+        host=config["rabbitmq_host"],
+        port=config["rabbitmq_port"],
+        login=config["rabbitmq_username"],
+        password=config["rabbitmq_password"],
+        virtual_host=config["rabbitmq_vhost"],
+    )
+    async with connection:
+        channel = await connection.channel()
+        queue = await channel.declare_queue(config["rabbitmq_queue"], durable=True)
+        
+        for token in tokens:
+            await channel.default_exchange.publish(
+                Message(
+                    body=json.dumps(token).encode(),
+                    delivery_mode=2,  # persistent
+                ),
+                routing_key=queue.name
+            )
+    print(f"Sent: {len(tokens)} tokens to RabbitMQ")
+
+def produce_to_rabbitmq(**kwargs):
     tokens = kwargs["ti"].xcom_pull(key="filtered_tokens", task_ids="filter_tokens")
     if not tokens:
-        print("No new tokens to send to Kafka.")
+        print("No tokens to send.")
         return
-
-    producer = KafkaProducer(
-        bootstrap_servers=config["kafka_bootstrap_servers"],
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-    )
-    for token in tokens:
-        producer.send(config["kafka_topic"], token)
-    producer.flush()
-    print(f"Sent: {len(tokens)} tokens to Kafka")
+    asyncio.run(publish_tokens(tokens))

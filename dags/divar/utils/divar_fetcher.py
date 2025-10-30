@@ -1,68 +1,63 @@
 import json
+import asyncio
 import re
 import time
 from datetime import datetime
 import httpx
-
-from kafka import KafkaConsumer, KafkaProducer
+from aio_pika import connect_robust, IncomingMessage
 from divar.utils.divar_transformer import transform_data
 
 from utils.config import config
 
 DIVAR_API_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
 
-def consume_and_fetch(**kwargs):
-    consumer = KafkaConsumer(
-        config["kafka_topic"],
-        bootstrap_servers=config["kafka_bootstrap_servers"],
-        auto_offset_reset="earliest",
-        enable_auto_commit=True,
-        group_id="divar_consumer_group",
-        value_deserializer=lambda x: json.loads(x.decode("utf-8")),
+async def consume_batch():
+    connection = await connect_robust(
+        host=config["rabbitmq_host"],
+        port=config["rabbitmq_port"],
+        login=config["rabbitmq_username"],
+        password=config["rabbitmq_password"],
+        virtual_host=config["rabbitmq_vhost"],
     )
-    messages = consumer.poll(timeout_ms=10000, max_records=40)
-    consumer.commit()
-    consumer.close()
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=20)
+        queue = await channel.declare_queue(config["rabbitmq_queue"], durable=True)
 
-    fetched_data = []
-    client_params = {
-        "verify": True,
-        "headers": {"User-Agent": config["user_agent_default"]},
-    }
+        # Load curl
+        with open("./dags/divar/utils/curl_commands/curl_command_01.txt") as f:
+            curl_command = f.read()
+        from curl2json.parser import parse_curl
+        parsed = parse_curl(curl_command)
+        parsed.pop("cookies", None)
 
-    with httpx.Client(**client_params) as client:
-        # receive cookies
-        try:
-            resp = client.get("https://divar.ir")
+        async with httpx.AsyncClient(headers=parsed.get("headers", {}), verify=True) as client:
+            resp = await client.get("https://divar.ir")
             resp.raise_for_status()
-            print("✅ Cookies received")
-        except Exception as e:
-            print(f"❌ Error while getting cookies: {e}")
-            return
 
-        # Process tokens
-        for topic_partition, partition_messages in messages.items():
-            for message in partition_messages:
-                token = message.value
-                url = DIVAR_API_URL.format(token=token)
-                try:
-                    response = client.get(url)
-                    response.raise_for_status()
-                    data = response.json()
-                    fetched_data.append({"token": token, "data": data})
-                    # print(f"Received: data for token {token}")
-                    time.sleep(1.5)
-                except Exception as e:
-                    print(f"Error while fetching content for {token}: {e}")
-                    continue
+            fetched = []
+            async for message in queue:
+                async with message.process():
+                    token = json.loads(message.body.decode())
+                    try:
+                        resp = await client.get(DIVAR_API_URL.format(token=token))
+                        resp.raise_for_status()
+                        fetched.append({"token": token, "data": resp.json()})
+                        await asyncio.sleep(4.5)
+                    except Exception as e:
+                        print(f"Fetch error {token}: {e}")
+                if len(fetched) >= 20:
+                    break
+            return fetched
 
+def consume_and_fetch(**kwargs):
+    fetched_data = asyncio.run(consume_batch())
     if fetched_data:
         kwargs["ti"].xcom_push(key="fetched_data", value=fetched_data)
-        print(f"Received: {len(fetched_data)} tokens processed")
+        print(f"Processed: {len(fetched_data)} items")
     else:
-        print("⚠️No messages found in Kafka.")
-
-
+        print("No messages in queue.")
+        
 def transform(**kwargs):
     fetched_data = kwargs["ti"].xcom_pull(
         key="fetched_data", task_ids="consume_and_fetch"
