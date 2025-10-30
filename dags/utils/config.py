@@ -22,3 +22,8 @@ ENV_VARS = [
 ]
 
 config = {var.lower(): os.getenv(var) for var in ENV_VARS}
+
+# int
+config = config.copy()
+config["redis_port"] = int(config["redis_port"]) if config["redis_port"] else 6379
+config["rabbitmq_port"] = int(config["rabbitmq_port"]) if config["rabbitmq_port"] else 5672
