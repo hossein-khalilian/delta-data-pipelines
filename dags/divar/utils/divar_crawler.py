@@ -1,16 +1,17 @@
+import asyncio
 import json
 import time
 from datetime import datetime, timedelta
 
 import httpx
 import redis
+from aio_pika import Message, connect_robust
 from curl2json.parser import parse_curl
-# from kafka import KafkaConsumer, KafkaProducer
 
 from utils.config import config
 
-import asyncio
-from aio_pika import Message, connect_robust
+# from kafka import KafkaConsumer, KafkaProducer
+
 
 # ETL for crawler DAG
 def extract_tokens(**kwargs):
@@ -116,9 +117,7 @@ def extract_tokens(**kwargs):
 
                 all_tokens.update(new_tokens)
                 ratio = duplicate_count / len(tokens) if tokens else 1
-                print(
-                    f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})"
-                )
+                print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
                 if ratio >= 0.3:
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
@@ -176,6 +175,7 @@ def filter_tokens(**kwargs):
 #     producer.flush()
 #     print(f"Sent: {len(tokens)} tokens to Kafka")
 
+
 async def publish_tokens(tokens):
     connection = await connect_robust(
         host=config["rabbitmq_host"],
@@ -187,20 +187,22 @@ async def publish_tokens(tokens):
     async with connection:
         channel = await connection.channel()
         queue = await channel.declare_queue(config["rabbitmq_queue"], durable=True)
-        
+
         for token in tokens:
             await channel.default_exchange.publish(
                 Message(
                     body=json.dumps(token).encode(),
                     delivery_mode=2,  # persistent
                 ),
-                routing_key=queue.name
+                routing_key=queue.name,
             )
     print(f"Sent: {len(tokens)} tokens to RabbitMQ")
 
+
 def produce_to_rabbitmq(**kwargs):
-    tokens = kwargs["ti"].xcom_pull(key="filtered_tokens", task_ids="filter_tokens")
+    tokens = kwargs["ti"].xcom_pull(key="filtered_tokens", task_ids="transform_task")
     if not tokens:
         print("No tokens to send.")
         return
     asyncio.run(publish_tokens(tokens))
+
