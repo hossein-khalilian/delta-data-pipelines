@@ -21,7 +21,7 @@ async def consume_batch():
     )
     async with connection:
         channel = await connection.channel()
-        await channel.set_qos(prefetch_count=20)
+        await channel.set_qos(prefetch_count=40)
         queue = await channel.declare_queue(config["rabbitmq_queue"], durable=True)
 
         # Load curl
@@ -49,7 +49,7 @@ async def consume_batch():
                         await asyncio.sleep(4.5)
                     except Exception as e:
                         print(f"Fetch error {token}: {e}")
-                if len(fetched) >= 20:
+                if len(fetched) >= 40:
                     break
             return fetched
 

@@ -28,23 +28,23 @@ consumer_dag = DAG(
 rabbitmq_sensor = RabbitMQSensor(
     task_id="rabbitmq_sensor",
     queue_name=config["rabbitmq_queue"],
-    batch_size=10,  # consume up to 10 messages per run
+    batch_size=2,  # consume up to 10 messages per run
     timeout=600,  # maximum wait time in seconds
     dag=consumer_dag,
 )
 
 
-# consume_and_fetch task
-def consume_and_fetch_wrapper(**context):
-    # Pull messages from sensor via XCom
-    messages = context["ti"].xcom_pull(task_ids="rabbitmq_sensor")
-    if messages:
-        consume_and_fetch()
+# # consume_and_fetch task
+# def consume_and_fetch_wrapper(**context):
+#     # Pull messages from sensor via XCom
+#     messages = context["ti"].xcom_pull(task_ids="rabbitmq_sensor")
+#     if messages:
+#         consume_and_fetch(context)
 
 
 consume_fetch_task = PythonOperator(
     task_id="consume_and_fetch",
-    python_callable=consume_and_fetch_wrapper,
+    python_callable=consume_and_fetch,
     provide_context=True,
     dag=consumer_dag,
 )
