@@ -22,8 +22,7 @@ class RabbitMQSensorTrigger(BaseTrigger):
             host=config["rabbitmq_host"],
             port=config["rabbitmq_port"],
             login=config["rabbitmq_user"],
-            password=config["rabbitmq_password"],
-            virtual_host=config["rabbitmq_vhost"],
+            password=config["rabbitmq_pass"],
         )
         async with connection:
             channel = await connection.channel()
@@ -45,8 +44,7 @@ class RabbitMQSensor(BaseSensorOperator):
                 host=config["rabbitmq_host"],
                 port=config["rabbitmq_port"],
                 login=config["rabbitmq_user"],
-                password=config["rabbitmq_password"],
-                virtual_host=config["rabbitmq_vhost"],
+                password=config["rabbitmq_pass"],
             )
         )
 
@@ -63,4 +61,3 @@ class RabbitMQSensor(BaseSensorOperator):
                 timeout=self.timeout,
             )
         return has_message
-

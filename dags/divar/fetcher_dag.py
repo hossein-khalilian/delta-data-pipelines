@@ -6,7 +6,7 @@ from airflow.operators.python import PythonOperator
 from divar.utils.divar_fetcher import consume_and_fetch, transform
 from utils.config import config
 from utils.mongodb_utils import store_to_mongo
-from utils.rabbitmq_utils import RabbitMQSensor
+from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
 
 # DAGs
 default_args = {

@@ -1,23 +1,24 @@
-import json
 import asyncio
+import json
 import re
 import time
 from datetime import datetime
-import httpx
-from aio_pika import connect_robust, IncomingMessage
-from divar.utils.divar_transformer import transform_data
 
+import httpx
+from aio_pika import IncomingMessage, connect_robust
+
+from divar.utils.divar_transformer import transform_data
 from utils.config import config
 
 DIVAR_API_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
+
 
 async def consume_batch():
     connection = await connect_robust(
         host=config["rabbitmq_host"],
         port=config["rabbitmq_port"],
-        login=config["rabbitmq_username"],
-        password=config["rabbitmq_password"],
-        virtual_host=config["rabbitmq_vhost"],
+        login=config["rabbitmq_user"],
+        password=config["rabbitmq_pass"],
     )
     async with connection:
         channel = await connection.channel()
@@ -28,10 +29,13 @@ async def consume_batch():
         with open("./dags/divar/utils/curl_commands/curl_command_01.txt") as f:
             curl_command = f.read()
         from curl2json.parser import parse_curl
+
         parsed = parse_curl(curl_command)
         parsed.pop("cookies", None)
 
-        async with httpx.AsyncClient(headers=parsed.get("headers", {}), verify=True) as client:
+        async with httpx.AsyncClient(
+            headers=parsed.get("headers", {}), verify=True
+        ) as client:
             resp = await client.get("https://divar.ir")
             resp.raise_for_status()
 
@@ -50,6 +54,7 @@ async def consume_batch():
                     break
             return fetched
 
+
 def consume_and_fetch(**kwargs):
     fetched_data = asyncio.run(consume_batch())
     if fetched_data:
@@ -57,7 +62,8 @@ def consume_and_fetch(**kwargs):
         print(f"Processed: {len(fetched_data)} items")
     else:
         print("No messages in queue.")
-        
+
+
 def transform(**kwargs):
     fetched_data = kwargs["ti"].xcom_pull(
         key="fetched_data", task_ids="consume_and_fetch"
@@ -80,3 +86,4 @@ def transform(**kwargs):
             continue
 
     kwargs["ti"].xcom_push(key="transformed_data", value=transformed_data)
+
