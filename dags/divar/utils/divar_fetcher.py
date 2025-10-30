@@ -20,7 +20,7 @@ def consume_and_fetch(**kwargs):
         group_id="divar_consumer_group",
         value_deserializer=lambda x: json.loads(x.decode("utf-8")),
     )
-    messages = consumer.poll(timeout_ms=10000, max_records=20)
+    messages = consumer.poll(timeout_ms=10000, max_records=40)
     consumer.commit()
     consumer.close()
 
