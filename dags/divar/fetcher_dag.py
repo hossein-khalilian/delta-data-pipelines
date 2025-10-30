@@ -1,12 +1,11 @@
 from datetime import datetime, timedelta
-
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
-# from utils.divar_fetcher import consume_and_fetch
 from divar.utils.divar_fetcher import consume_and_fetch, transform
-from utils.kafka_utils import KafkaMessageSensor
 from utils.mongodb_utils import store_to_mongo
+from utils.rabbitmq_utils import RabbitMQSensor
+from utils.config import config
+
 
 # DAGs
 default_args = {
@@ -18,7 +17,7 @@ default_args = {
 }
 
 consumer_dag = DAG(
-    "divar_fetcher",
+    "divar_fetcher2",
     default_args=default_args,
     description="consume and fetch",
     schedule_interval="*/3 * * * *",
@@ -26,10 +25,12 @@ consumer_dag = DAG(
 )
 
 # Consumer DAG tasks
-kafka_sensor = KafkaMessageSensor(
-    task_id="kafka_message_sensor",
-    poke_interval=60,
+rabbitmq_sensor = RabbitMQSensor(
+    task_id="rabbitmq_sensor",
+    queue_name=config["rabbitmq_queue"],
+    # poke_interval=60,
     timeout=600,
+    deferrable=True,
     dag=consumer_dag,
 )
 
@@ -55,4 +56,4 @@ store_task = PythonOperator(
 )
 
 #  Consumer DAG graph
-kafka_sensor >> consume_fetch_task >> transform_task >> store_task
+rabbitmq_sensor >> consume_fetch_task >> transform_task >> store_task
