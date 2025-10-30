@@ -30,19 +30,19 @@ extract_task = PythonOperator(
     dag=producer_dag,
 )
 
-filter_task = PythonOperator(
-    task_id="filter_tokens",
+transform_task = PythonOperator(
+    task_id="transform_task",
     python_callable=filter_tokens,
     provide_context=True,
     dag=producer_dag,
 )
 
-produce_task = PythonOperator(
-    task_id="produce_to_kafka",
+load_task = PythonOperator(
+    task_id="load_task",
     python_callable=produce_to_rabbitmq,
     provide_context=True,
     dag=producer_dag,
 )
 
 # Producer DAG graph
-extract_task >> filter_task >> produce_task
+extract_task >> transform_task >> load_task

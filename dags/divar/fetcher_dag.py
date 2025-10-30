@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+
 from divar.utils.divar_fetcher import consume_and_fetch, transform
+from utils.config import config
 from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq_utils import RabbitMQSensor
-from utils.config import config
-
 
 # DAGs
 default_args = {
@@ -30,7 +31,6 @@ rabbitmq_sensor = RabbitMQSensor(
     queue_name=config["rabbitmq_queue"],
     # poke_interval=60,
     timeout=600,
-    deferrable=True,
     dag=consumer_dag,
 )
 
