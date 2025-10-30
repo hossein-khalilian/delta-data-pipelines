@@ -7,6 +7,7 @@ from divar.utils.divar_fetcher import consume_and_fetch, transform
 from utils.config import config
 from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
+from utils.rabbitmq.rabbitmq_utils import RabbitMQSensorTrigger
 
 # DAGs
 default_args = {
@@ -29,8 +30,9 @@ consumer_dag = DAG(
 rabbitmq_sensor = RabbitMQSensor(
     task_id="rabbitmq_sensor",
     queue_name=config["rabbitmq_queue"],
-    # poke_interval=60,
+    # poke_interval=40,
     timeout=600,
+    # mode="poke", 
     dag=consumer_dag,
 )
 
