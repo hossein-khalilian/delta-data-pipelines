@@ -1,13 +1,11 @@
-ARG AIRFLOW_VERSION=2.10.4
+ARG AIRFLOW_VERSION=2.10.5
 FROM apache/airflow:${AIRFLOW_VERSION}
 
-# Install git
 USER root
-RUN apt update && apt-get install -y git && apt clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+  && apt-get install git -y \
+  && apt-get clean 
 
-# Switch back to airflow user (optional, recommended)
 USER airflow
-
 ADD requirements.txt .
-RUN pip install apache-airflow==${AIRFLOW_VERSION} -r requirements.txt
-
+RUN pip install -r requirements.txt
