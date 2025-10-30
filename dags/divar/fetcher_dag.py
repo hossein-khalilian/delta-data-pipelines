@@ -2,14 +2,12 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
 from divar.utils.divar_fetcher import consume_and_fetch, transform
 from utils.config import config
 from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
-from utils.rabbitmq.rabbitmq_utils import RabbitMQSensorTrigger
 
-# DAGs
+# DAG default args
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
@@ -21,28 +19,37 @@ default_args = {
 consumer_dag = DAG(
     "divar_fetcher",
     default_args=default_args,
-    description="consume and fetch",
+    description="Consume and fetch messages from RabbitMQ",
     schedule_interval="*/3 * * * *",
     catchup=False,
 )
 
-# Consumer DAG tasks
+# RabbitMQ sensor task
 rabbitmq_sensor = RabbitMQSensor(
     task_id="rabbitmq_sensor",
     queue_name=config["rabbitmq_queue"],
-    # poke_interval=40,
-    timeout=600,
-    # mode="poke", 
+    batch_size=10,  # consume up to 10 messages per run
+    timeout=600,  # maximum wait time in seconds
     dag=consumer_dag,
 )
 
+
+# consume_and_fetch task
+def consume_and_fetch_wrapper(**context):
+    # Pull messages from sensor via XCom
+    messages = context["ti"].xcom_pull(task_ids="rabbitmq_sensor")
+    if messages:
+        consume_and_fetch()
+
+
 consume_fetch_task = PythonOperator(
     task_id="consume_and_fetch",
-    python_callable=consume_and_fetch,
+    python_callable=consume_and_fetch_wrapper,
     provide_context=True,
     dag=consumer_dag,
 )
 
+# transform task
 transform_task = PythonOperator(
     task_id="transform",
     python_callable=transform,
@@ -50,6 +57,7 @@ transform_task = PythonOperator(
     dag=consumer_dag,
 )
 
+# store to mongo task
 store_task = PythonOperator(
     task_id="store_to_mongo",
     python_callable=store_to_mongo,
@@ -57,5 +65,5 @@ store_task = PythonOperator(
     dag=consumer_dag,
 )
 
-#  Consumer DAG graph
+# DAG dependencies
 rabbitmq_sensor >> consume_fetch_task >> transform_task >> store_task

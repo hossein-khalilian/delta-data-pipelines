@@ -6,7 +6,6 @@ from datetime import datetime
 
 import httpx
 from aio_pika import IncomingMessage, connect_robust
-
 from divar.utils.divar_transformer import transform_data
 from utils.config import config
 
@@ -86,4 +85,3 @@ def transform(**kwargs):
             continue
 
     kwargs["ti"].xcom_push(key="transformed_data", value=transformed_data)
-
