@@ -3,13 +3,12 @@ import json
 import logging
 from datetime import datetime
 
-from aio_pika import connect_robust
+from aio_pika import Message, connect_robust, IncomingMessage
 from airflow.sensors.base import BaseSensorOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 from utils.config import config
 
 logger = logging.getLogger(__name__)
-
 
 def parse_message(body: bytes):
     """Try to decode bytes and parse JSON if possible, otherwise return string."""
@@ -18,7 +17,6 @@ def parse_message(body: bytes):
         return json.loads(decoded)  # parse JSON
     except json.JSONDecodeError:
         return decoded  # return as string if not JSON
-
 
 class RabbitMQSensorTrigger(BaseTrigger):
     def __init__(self, queue_name: str, batch_size: int = 1, timeout: int = 60):
@@ -141,6 +139,48 @@ class RabbitMQSensor(BaseSensorOperator):
                 ),
                 timeout=self.timeout,
             )
-
         return messages
+    
+async def publish_tokens(tokens, queue_name: str = None):
+    queue_name = queue_name or config["rabbitmq_queue"]
+    
+    connection = await connect_robust(
+        host=config["rabbitmq_host"],
+        port=config["rabbitmq_port"],
+        login=config["rabbitmq_user"],
+        password=config["rabbitmq_pass"],
+    )
+    async with connection:
+        channel = await connection.channel()
+        queue = await channel.declare_queue(queue_name, durable=True)
 
+        for token in tokens:
+            await channel.default_exchange.publish(
+                Message(
+                    body=json.dumps(token).encode(),
+                    delivery_mode=2,  # persistent
+                ),
+                routing_key=queue.name,
+            )
+    print(f"Sent: {len(tokens)} tokens to RabbitMQ")
+    
+async def iterate_queue_messages(queue_name: str, max_count: int = 40):
+
+    connection = await connect_robust(
+        host=config["rabbitmq_host"],
+        port=config["rabbitmq_port"],
+        login=config["rabbitmq_user"],
+        password=config["rabbitmq_pass"],
+    )
+    async with connection:
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=max_count)
+        queue = await channel.declare_queue(queue_name, durable=True)
+
+        count = 0
+        async with queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                yield message  # پیام را می‌فرستیم به caller
+                count += 1
+                if count >= max_count:
+                    break

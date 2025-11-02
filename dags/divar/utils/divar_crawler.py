@@ -1,13 +1,10 @@
 import asyncio
 import json
 import time
-from datetime import datetime, timedelta
-
 import httpx
 import redis
-from aio_pika import Message, connect_robust
 from curl2json.parser import parse_curl
-
+from utils.rabbitmq.rabbitmq_utils import publish_tokens
 from utils.config import config
 
 
@@ -146,55 +143,8 @@ def filter_tokens(**kwargs):
         kwargs["ti"].xcom_push(key="filtered_tokens", value=[])
         return
 
-    # r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
-    # new_tokens = []
-    # for token in tokens:
-    #     exists = r.execute_command("BF.EXISTS", REDIS_BLOOM_FILTER, token)
-    #     if not exists:
-    #         r.execute_command("BF.ADD", REDIS_BLOOM_FILTER, token)
-    #         new_tokens.append(token)
-
     kwargs["ti"].xcom_push(key="filtered_tokens", value=tokens)
     print(f"Transferred: {len(tokens)} tokens to XCom")
-
-
-# def produce_to_kafka(**kwargs):
-#     tokens = kwargs["ti"].xcom_pull(key="filtered_tokens", task_ids="filter_tokens")
-#     if not tokens:
-#         print("No new tokens to send to Kafka.")
-#         return
-
-#     producer = KafkaProducer(
-#         bootstrap_servers=config["kafka_bootstrap_servers"],
-#         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-#     )
-#     for token in tokens:
-#         producer.send(config["kafka_topic"], token)
-#     producer.flush()
-#     print(f"Sent: {len(tokens)} tokens to Kafka")
-
-
-async def publish_tokens(tokens):
-    connection = await connect_robust(
-        host=config["rabbitmq_host"],
-        port=config["rabbitmq_port"],
-        login=config["rabbitmq_user"],
-        password=config["rabbitmq_pass"],
-    )
-    async with connection:
-        channel = await connection.channel()
-        queue = await channel.declare_queue(config["rabbitmq_queue"], durable=True)
-
-        for token in tokens:
-            await channel.default_exchange.publish(
-                Message(
-                    body=json.dumps(token).encode(),
-                    delivery_mode=2,  # persistent
-                ),
-                routing_key=queue.name,
-            )
-    print(f"Sent: {len(tokens)} tokens to RabbitMQ")
-
 
 def produce_to_rabbitmq(**kwargs):
     tokens = kwargs["ti"].xcom_pull(key="filtered_tokens", task_ids="transform_task")

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from divar.utils.divar_fetcher import consume_and_fetch, transform
+from divar.utils.divar_fetcher import fetch_function, transform
 from utils.config import config
 from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
@@ -36,17 +36,17 @@ rabbitmq_sensor = RabbitMQSensor(
 )
 
 
-# # consume_and_fetch task
-# def consume_and_fetch_wrapper(**context):
+# # fetch_function task
+# def fetch_function(**context):
 #     # Pull messages from sensor via XCom
 #     messages = context["ti"].xcom_pull(task_ids="rabbitmq_sensor")
 #     if messages:
-#         consume_and_fetch(context)
+#         fetch_function(context)
 
 
 consume_fetch_task = PythonOperator(
-    task_id="consume_and_fetch",
-    python_callable=consume_and_fetch,
+    task_id="fetch_function",
+    python_callable=fetch_function,
     provide_context=True,
     dag=consumer_dag,
 )
