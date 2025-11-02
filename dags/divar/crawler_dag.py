@@ -20,6 +20,8 @@ producer_dag = DAG(
     description="extract tokens",
     schedule_interval="*/5 * * * *",
     catchup=False,
+    max_active_runs=1,
+    concurrency=1, 
 )
 
 # Producer DAG tasks

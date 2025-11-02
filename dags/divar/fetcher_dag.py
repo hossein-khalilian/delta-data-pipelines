@@ -22,6 +22,8 @@ consumer_dag = DAG(
     description="Consume and fetch messages from RabbitMQ",
     schedule_interval="*/3 * * * *",
     catchup=False,
+    max_active_runs=1,
+    concurrency=1, 
 )
 
 # RabbitMQ sensor task
