@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from divar.utils.divar_fetcher import fetch_function, transform
+from divar.utils.divar_fetcher import fetcher_function, transform
 from utils.config import config
 from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
@@ -30,30 +30,21 @@ consumer_dag = DAG(
 rabbitmq_sensor = RabbitMQSensor(
     task_id="rabbitmq_sensor",
     queue_name=config["rabbitmq_queue"],
-    batch_size=2,  # consume up to 10 messages per run
-    timeout=600,  # maximum wait time in seconds
+    batch_size=40,  
+    timeout=600,  
     dag=consumer_dag,
 )
 
-
-# # fetch_function task
-# def fetch_function(**context):
-#     # Pull messages from sensor via XCom
-#     messages = context["ti"].xcom_pull(task_ids="rabbitmq_sensor")
-#     if messages:
-#         fetch_function(context)
-
-
-consume_fetch_task = PythonOperator(
-    task_id="fetch_function",
-    python_callable=fetch_function,
+fetch_task = PythonOperator(
+    task_id="fetcher_task",
+    python_callable=fetcher_function,
     provide_context=True,
     dag=consumer_dag,
 )
 
 # transform task
 transform_task = PythonOperator(
-    task_id="transform",
+    task_id="transform_task",
     python_callable=transform,
     provide_context=True,
     dag=consumer_dag,
@@ -68,4 +59,4 @@ store_task = PythonOperator(
 )
 
 # DAG dependencies
-rabbitmq_sensor >> consume_fetch_task >> transform_task >> store_task
+rabbitmq_sensor >> fetch_task >> transform_task >> store_task

@@ -139,8 +139,9 @@ class RabbitMQSensor(BaseSensorOperator):
                 ),
                 timeout=self.timeout,
             )
+        # self.xcom_push(context, key="messages", value=messages)
         return messages
-    
+        
 async def publish_tokens(tokens, queue_name: str = None):
     queue_name = queue_name or config["rabbitmq_queue"]
     
