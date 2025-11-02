@@ -58,7 +58,8 @@ def extract_publish_time(data):
                 time_part = subtitle.split(" در ")[0].strip()
                 try:
                     dt = text_to_date(time_part)
-                    publish_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    # publish_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    publish_time = dt
                 except Exception:
                     publish_time = None
 
@@ -197,6 +198,7 @@ def transform_data(data: dict) -> dict:
             doc["rent_mode"] = "مقطوع"
         else:
             doc["rent_mode"] = "توافقی" 
+            
         # credit_mode
         doc["credit_mode"] = "مقطوع" if has_credit and not doc["transformable_credit"] else None
 

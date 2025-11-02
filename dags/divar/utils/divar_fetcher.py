@@ -78,7 +78,6 @@ def transform(**kwargs):
         try:
             transformed = transform_data(data)
             transformed["post_token"] = token
-            transformed["crawl_timestamp"] = datetime.utcnow().isoformat()
             transformed_data.append(transformed)
         except Exception as e:
             print(f"Error converting JSON for {token}: {e}")

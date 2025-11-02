@@ -10,8 +10,6 @@ from curl2json.parser import parse_curl
 
 from utils.config import config
 
-# from kafka import KafkaConsumer, KafkaProducer
-
 
 # ETL for crawler DAG
 def extract_tokens(**kwargs):
