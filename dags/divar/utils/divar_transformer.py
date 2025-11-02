@@ -1,33 +1,89 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
+def persian_to_english_digits(s):
+    """Convert Persian digits to English digits"""
+    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
+    english_digits = "0123456789"
+    return s.translate(str.maketrans(persian_digits, english_digits))
+
+def text_to_date(text):
+    text = text.strip()
+    text = persian_to_english_digits(text)
+    now = datetime.now()
+
+    if "لحظاتی پیش" in text:
+        return now
+    if "دقایقی پیش" in text:
+        return now - timedelta(minutes=5)
+
+    match = re.search(r"(\d+)", text)
+    amount = int(match.group(1)) if match else 0
+
+    if "روز" in text:
+        result = now - timedelta(days=amount)
+    elif "هفته" in text:
+        result = now - timedelta(weeks=amount)
+    elif "ماه" in text:
+        result = now - timedelta(days=amount * 30)
+    elif "ساعت" in text:
+        result = now - timedelta(hours=amount)
+    else:
+        result = now
+
+    return result
+
+def extract_publish_time(data):
+    """Extract the ad posting time"""
+    publish_time = None
+
+    # TITLE
+    title_section = next(
+        (section for section in data.get("sections", []) if section.get("section_name") == "TITLE"),
+        None
+    )
+
+    if title_section:
+        # LEGEND_TITLE_ROW 
+        legend_widget = next(
+            (w for w in title_section.get("widgets", [])
+             if w.get("widget_type") == "LEGEND_TITLE_ROW"),
+            None
+        )
+
+        if legend_widget:
+            subtitle = legend_widget.get("data", {}).get("subtitle")
+            if subtitle:
+                # before the word 'در' 
+                time_part = subtitle.split(" در ")[0].strip()
+                try:
+                    dt = text_to_date(time_part)
+                    publish_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    publish_time = None
+
+    return publish_time
 
 def transform_data(data: dict) -> dict:
     doc = {}
-    doc["record_timestamp"] = datetime.now().replace(microsecond=0).isoformat(sep=" ")
+    doc["created_at"] = datetime.now()
     doc["cat2_slug"] = data.get("analytics", {}).get("cat2") or None
     doc["cat3_slug"] = data.get("analytics", {}).get("cat3") or None
-    city_data = data.get("city")
-    if isinstance(city_data, dict):
-        doc["city_slug"] = city_data.get("second_slug", None)
-    else:
-        doc["city_slug"] = city_data or None
+    
+    city_slug = data.get("analytics", {}).get("city")
+    if not city_slug:
+        city_slug = data.get("city", {}).get("second_slug") or None
+    doc["city_slug"] = city_slug or None
+
     doc["neighborhood_slug"] = data.get("webengage", {}).get("district") or None
-    raw_date = data.get("seo", {}).get("unavailable_after")
-    doc["created_at_month"] = None
-    if raw_date:
-        try:
-            dt = datetime.strptime(raw_date[:10], "%Y-%m-%d")
-            doc["created_at_month"] = dt.strftime("%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
+    doc["created_at_month"] = extract_publish_time(data)
+
     raw_user_type = data.get("webengage", {}).get("business_type")
     mapping = {"personal": "شخصی", "premium-panel": "مشاور املاک"}
-    doc["user_type"] = mapping.get(raw_user_type, float("nan"))
-    doc["description"] = (
-        data.get("seo", {}).get("post_seo_schema", {}).get("description") or None
-    )
-    doc["title"] = data.get("seo", {}).get("web_info", {}).get("title") or None
+    doc["user_type"] = mapping.get(raw_user_type, None)
+    
+    doc["description"] = data.get("seo", {}).get("post_seo_schema", {}).get("description") or None
+    doc["title"] = data.get("share", {}).get("title") or None
     
     doc["rent_mode"] = None
     doc["rent_value"] = None
