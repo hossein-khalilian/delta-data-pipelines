@@ -7,9 +7,8 @@ from curl2json.parser import parse_curl
 from utils.rabbitmq.rabbitmq_utils import publish_tokens
 from utils.config import config
 
-
 # ETL for crawler DAG
-def extract_tokens(**kwargs):
+def extract_filter_urls(**kwargs):
     BLOOM_KEY = config["redis_bloom_filter"]
     print(config["redis_host"])
     print(config["redis_port"])
@@ -130,24 +129,11 @@ def extract_tokens(**kwargs):
                 print(f"❌ Error requesting page {page}: {e}")
                 break
 
-    kwargs["ti"].xcom_push(key="extracted_tokens", value=list(all_tokens))
+    kwargs["ti"].xcom_push(key="extracted_urls", value=list(all_tokens))
     print(f"✅ Extraction completed — {len(all_tokens)} new tokens pushed to XCom.")
 
-
-def filter_tokens(**kwargs):
-    tokens = (
-        kwargs["ti"].xcom_pull(key="extracted_tokens", task_ids="extract_tokens") or []
-    )
-    if not tokens:
-        print("No tokens available for filtering.")
-        kwargs["ti"].xcom_push(key="filtered_tokens", value=[])
-        return
-
-    kwargs["ti"].xcom_push(key="filtered_tokens", value=tokens)
-    print(f"Transferred: {len(tokens)} tokens to XCom")
-
 def produce_to_rabbitmq(**kwargs):
-    tokens = kwargs["ti"].xcom_pull(key="filtered_tokens", task_ids="transform_task")
+    tokens = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_filter_task")
     if not tokens:
         print("No tokens to send.")
         return

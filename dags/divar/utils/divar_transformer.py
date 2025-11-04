@@ -181,6 +181,9 @@ def transform_data(data: dict) -> dict:
 
         doc["transformable_price"] = bool(trans_credit and trans_rent)
 
+        has_credit = False
+        has_rent = False
+        
         # rent_type
         if doc["rent_credit_transform"]:
             doc["rent_type"] = "rent_credit"
@@ -220,6 +223,7 @@ def transform_data(data: dict) -> dict:
         if doc["rent_value"] is None:
             doc["rent_value"] = float(web_rent) if web_rent else None
 
+        
         has_credit = doc["credit_value"] is not None and doc["credit_value"] > 0
         has_rent = doc["rent_value"] is not None and doc["rent_value"] > 0
 

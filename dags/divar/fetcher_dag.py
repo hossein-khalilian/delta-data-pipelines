@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from divar.utils.divar_fetcher import fetcher_function, transform
+from divar.utils.divar_fetcher import fetcher_function, transformer_function
 from utils.config import config
 from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
@@ -27,36 +27,37 @@ consumer_dag = DAG(
 )
 
 # RabbitMQ sensor task
-rabbitmq_sensor = RabbitMQSensor(
-    task_id="rabbitmq_sensor",
+rabbitmq_sensor_task = RabbitMQSensor(
+    task_id="rabbitmq_sensor_task",
     queue_name=config["rabbitmq_queue"],
     batch_size=40,  
     timeout=600,  
     dag=consumer_dag,
 )
 
-fetch_task = PythonOperator(
+#fetcher_task
+fetcher_task = PythonOperator(
     task_id="fetcher_task",
     python_callable=fetcher_function,
     provide_context=True,
     dag=consumer_dag,
 )
 
-# transform task
-transform_task = PythonOperator(
-    task_id="transform_task",
-    python_callable=transform,
+# transformer task
+transformer_task = PythonOperator(
+    task_id="transformer_task",
+    python_callable=transformer_function,
     provide_context=True,
     dag=consumer_dag,
 )
 
 # store to mongo task
-store_task = PythonOperator(
-    task_id="store_to_mongo",
+storer_task = PythonOperator(
+    task_id="storer_task",
     python_callable=store_to_mongo,
     provide_context=True,
     dag=consumer_dag,
 )
 
 # DAG dependencies
-rabbitmq_sensor >> fetch_task >> transform_task >> store_task
+rabbitmq_sensor_task >> fetcher_task >> transformer_task >> storer_task

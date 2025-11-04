@@ -5,7 +5,7 @@ from utils.config import config
 
 def store_to_mongo(**kwargs):
     transformed_data = kwargs["ti"].xcom_pull(
-        key="transformed_data", task_ids="transform_task"
+        key="transformed_data", task_ids="transformer_task"
     )
     if not transformed_data:
         print("No data available to store in MongoDB.")

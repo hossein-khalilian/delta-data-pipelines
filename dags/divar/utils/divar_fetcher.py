@@ -1,17 +1,13 @@
 import asyncio
-import json
 import httpx
 from divar.utils.divar_transformer import transform_data
-from utils.rabbitmq.rabbitmq_utils import iterate_queue_messages
-
-from utils.config import config
 
 DIVAR_API_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
 
 # fetcher_function
 def fetcher_function(**kwargs):
     fetched_messages = kwargs["ti"].xcom_pull(
-        key="return_value", task_ids="rabbitmq_sensor"
+        key="return_value", task_ids="rabbitmq_sensor_task"
     )
 
     if not fetched_messages:
@@ -38,7 +34,7 @@ def fetcher_function(**kwargs):
     else:
         print("No data fetched from API.")
 
-def transform(**kwargs):
+def transformer_function(**kwargs):
     fetched_data = kwargs["ti"].xcom_pull(
         key="fetched_data", task_ids="fetcher_task"
     )

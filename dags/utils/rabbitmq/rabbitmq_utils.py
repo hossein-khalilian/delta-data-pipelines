@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime
 
-from aio_pika import Message, connect_robust, IncomingMessage
+from aio_pika import Message, connect_robust
 from airflow.sensors.base import BaseSensorOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 from utils.config import config
@@ -11,12 +11,11 @@ from utils.config import config
 logger = logging.getLogger(__name__)
 
 def parse_message(body: bytes):
-    """Try to decode bytes and parse JSON if possible, otherwise return string."""
     decoded = body.decode("utf-8")
-    try:
-        return json.loads(decoded)  # parse JSON
-    except json.JSONDecodeError:
-        return decoded  # return as string if not JSON
+    # try:
+    return json.loads(decoded) # parse JSON
+    # except json.JSONDecodeError:
+    #     return decoded  # return as string if not JSON
 
 class RabbitMQSensorTrigger(BaseTrigger):
     def __init__(self, queue_name: str, batch_size: int = 1, timeout: int = 60):
@@ -80,7 +79,6 @@ class RabbitMQSensorTrigger(BaseTrigger):
                 {"status": "error", "error": str(e), "messages": messages}
             )
 
-
 class RabbitMQSensor(BaseSensorOperator):
     def __init__(
         self, queue_name: str, batch_size: int = 1, timeout: int = 60, **kwargs
@@ -139,7 +137,6 @@ class RabbitMQSensor(BaseSensorOperator):
                 ),
                 timeout=self.timeout,
             )
-        # self.xcom_push(context, key="messages", value=messages)
         return messages
         
 async def publish_tokens(tokens, queue_name: str = None):
