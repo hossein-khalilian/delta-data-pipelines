@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from divar.utils.divar_crawler import extract_filter_urls, produce_to_rabbitmq
+from divar.utils.divar_crawler import extract_transform_urls, produce_to_rabbitmq
 
 # DAGs
 default_args = {
@@ -25,9 +25,9 @@ producer_dag = DAG(
 )
 
 # Producer DAG tasks
-extract_filter_task = PythonOperator(
-    task_id="extract_filter_task",
-    python_callable=extract_filter_urls,
+extract_transform_task = PythonOperator(
+    task_id="extract_transform_task",
+    python_callable=extract_transform_urls,
     provide_context=True,
     dag=producer_dag,
 )
@@ -40,4 +40,4 @@ load_task = PythonOperator(
 )
 
 # Producer DAG graph
-extract_filter_task >> load_task
+extract_transform_task >> load_task

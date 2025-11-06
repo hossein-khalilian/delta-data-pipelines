@@ -8,7 +8,7 @@ from utils.rabbitmq.rabbitmq_utils import publish_tokens
 from utils.config import config
 
 # ETL for crawler DAG
-def extract_filter_urls(**kwargs):
+def extract_transform_urls(**kwargs):
     BLOOM_KEY = config["redis_bloom_filter"]
     print(config["redis_host"])
     print(config["redis_port"])
@@ -45,8 +45,10 @@ def extract_filter_urls(**kwargs):
         "headers": parsed_curl.pop("headers", {}),
     }
 
-    all_tokens = set()
+    all_tokens = []
     max_pages = 100
+
+    stop_condition = False
 
     with httpx.Client(**client_params) as client:
         # GET for get Cookies
@@ -100,23 +102,36 @@ def extract_filter_urls(**kwargs):
                 #     print(f"🔹 Widget found: {w}")
 
                 # Check for duplicate tokens
-                duplicate_count, new_tokens = 0, []
+                duplicate_count, new_tokens, duplicate_tokens = 0, [], []
                 for token in tokens:
                     exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, token)
                     if exists:
                         duplicate_count += 1
+                        duplicate_tokens.append(token)
                     else:
                         new_tokens.append(token)
                         rdb.execute_command("BF.ADD", BLOOM_KEY, token)
 
-                all_tokens.update(new_tokens)
+
                 ratio = duplicate_count / len(tokens) if tokens else 1
                 print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
                 if ratio >= 0.3:
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
-                    break
+                    # break
+                    stop_condition = True
+                    
+                if not stop_condition:
+                    all_tokens_to_push = new_tokens + duplicate_tokens
+                else:
+                    all_tokens_to_push = new_tokens 
+            
+                new_urls = [{"content_url": f"https://api.divar.ir/v8/posts-v2/web/{t}"} for t in all_tokens_to_push]
+                all_tokens.extend(new_urls)
 
+                if stop_condition:
+                    break
+                
                 # update pagination_data
                 pagination_info = result.get("pagination", {}) or {}
                 curl_data["pagination_data"] = pagination_info.get(
@@ -130,12 +145,12 @@ def extract_filter_urls(**kwargs):
                 break
 
     kwargs["ti"].xcom_push(key="extracted_urls", value=list(all_tokens))
-    print(f"✅ Extraction completed — {len(all_tokens)} new tokens pushed to XCom.")
+    print(f"✅ Extraction completed — {len(all_tokens)} new urls pushed to XCom.")
 
 def produce_to_rabbitmq(**kwargs):
-    tokens = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_filter_task")
-    if not tokens:
-        print("No tokens to send.")
+    urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
+    if not urls:
+        print("No URLs to send.")
         return
-    asyncio.run(publish_tokens(tokens))
+    asyncio.run(publish_tokens(urls))
 

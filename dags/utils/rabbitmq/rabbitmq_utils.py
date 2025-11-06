@@ -108,9 +108,9 @@ class RabbitMQSensor(BaseSensorOperator):
                         async for message in queue_iter:
                             async with message.process():
                                 messages.append(parse_message(message.body))
-                                self.log.info(
-                                    f"Sensor: Consumed {len(messages)} messages"
-                                )
+                                # self.log.info(
+                                #     f"Sensor: Consumed {len(messages)} messages"
+                                # )
 
                             if len(messages) >= self.batch_size:
                                 return messages
@@ -126,6 +126,8 @@ class RabbitMQSensor(BaseSensorOperator):
                 return messages
 
         messages = asyncio.run(consume_batch())
+
+        self.log.info(f"✅ Consumed {len(messages)} URLs")
 
         if not messages:
             self.log.info(f"Deferring check for queue {self.queue_name}")
@@ -160,7 +162,7 @@ async def publish_tokens(tokens, queue_name: str = None):
                 ),
                 routing_key=queue.name,
             )
-    print(f"Sent: {len(tokens)} tokens to RabbitMQ")
+    print(f"✅ Sent {len(tokens)} URLs to RabbitMQ")
     
 async def iterate_queue_messages(queue_name: str, max_count: int = 40):
 

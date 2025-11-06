@@ -36,28 +36,28 @@ rabbitmq_sensor_task = RabbitMQSensor(
 )
 
 #fetcher_task
-fetcher_task = PythonOperator(
-    task_id="fetcher_task",
+fetch_task = PythonOperator(
+    task_id="fetch_task",
     python_callable=fetcher_function,
     provide_context=True,
     dag=consumer_dag,
 )
 
 # transformer task
-transformer_task = PythonOperator(
-    task_id="transformer_task",
+transform_task = PythonOperator(
+    task_id="transform_task",
     python_callable=transformer_function,
     provide_context=True,
     dag=consumer_dag,
 )
 
 # store to mongo task
-storer_task = PythonOperator(
-    task_id="storer_task",
+load_task = PythonOperator(
+    task_id="load_task",
     python_callable=store_to_mongo,
     provide_context=True,
     dag=consumer_dag,
 )
 
 # DAG dependencies
-rabbitmq_sensor_task >> fetcher_task >> transformer_task >> storer_task
+rabbitmq_sensor_task >> fetch_task >> transform_task >> load_task

@@ -17,26 +17,30 @@ def fetcher_function(**kwargs):
     async def fetch_all(messages):
         async with httpx.AsyncClient(verify=True) as client:
             fetched = []
-            for token in messages:
+            for index, msg in enumerate(messages, start=1):
+                print(f"{index}")
+                
+                url = msg["content_url"]
+                
                 try:
-                    resp = await client.get(DIVAR_API_URL.format(token=token))
+                    resp = await client.get(url)
                     resp.raise_for_status()
-                    fetched.append({"token": token, "data": resp.json()})
+                    fetched.append({"content_url": url, "data": resp.json()})
                     await asyncio.sleep(3)
                 except Exception as e:
-                    print(f"Fetch error {token}: {e}")
+                    print(f"Fetch error {url}: {e}")
             return fetched
 
     fetched_data = asyncio.run(fetch_all(fetched_messages))
     if fetched_data:
         kwargs["ti"].xcom_push(key="fetched_data", value=fetched_data)
-        print(f"Processed: {len(fetched_data)} items")
+        print(f"✅ Processed {len(fetched_data)} items")
     else:
         print("No data fetched from API.")
 
 def transformer_function(**kwargs):
     fetched_data = kwargs["ti"].xcom_pull(
-        key="fetched_data", task_ids="fetcher_task"
+        key="fetched_data", task_ids="fetch_task"
     )
     if not fetched_data:
         print("⚠️No data available for transformation.")
@@ -44,14 +48,16 @@ def transformer_function(**kwargs):
 
     transformed_data = []
     for item in fetched_data:
-        token = item["token"]
+        url = item["content_url"]
         data = item["data"]
         try:
             transformed = transform_data(data)
-            transformed["post_token"] = token
+            transformed["content_url"] = url
             transformed_data.append(transformed)
         except Exception as e:
-            print(f"Error converting JSON for {token}: {e}")
+            print(f"Error converting JSON for {url}: {e}")
             continue
+        
+    print(f"✅ Transformed {len(transformed_data)} items.")
 
-    kwargs["ti"].xcom_push(key="transformed_data", value=transformed_data)
+    kwargs["ti"].xcom_push(key="transform_data", value=transformed_data)

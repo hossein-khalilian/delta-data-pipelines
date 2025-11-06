@@ -5,7 +5,7 @@ from utils.config import config
 
 def store_to_mongo(**kwargs):
     transformed_data = kwargs["ti"].xcom_pull(
-        key="transformed_data", task_ids="transformer_task"
+        key="transform_data", task_ids="transform_task"
     )
     if not transformed_data:
         print("No data available to store in MongoDB.")
@@ -14,17 +14,29 @@ def store_to_mongo(**kwargs):
     client = MongoClient(config["mongo_uri"])
     db = client[config["mongo_db"]]
     collection = db[config["mongo_collection"]]
+    
+    saved_count = 0
+    
     try:
-        collection.create_index("post_token", unique=True)
+        collection.create_index("content_url", unique=True, sparse=True)
         for transformed in transformed_data:
+            
+            if "content_url" not in transformed or not transformed["content_url"]:
+                print("⚠️ Skipping record without content_url")
+                continue
+            
             try:
                 collection.insert_one(transformed)
+                saved_count += 1 
                 # print(
                 #     f"Saved: data for token {transformed['post_token']} in MongoDB"
                 # )
             except DuplicateKeyError:
-                print(f"Duplicate: token {transformed['post_token']} has already been stored.")
+                print(f"Duplicate: content_url {transformed['content_url']} has already been stored.")
             except Exception as e:
-                print(f"Error while saving {transformed['post_token']}: {e}")
+                print(f"Error while saving {transformed.get('content_url')}: {e}")
+                
+        print(f"✅ Saved {saved_count} new records in MongoDB")
+
     finally:
         client.close()
