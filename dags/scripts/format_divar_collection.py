@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from dateutil import parser
 from dotenv import load_dotenv
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 load_dotenv()
@@ -117,6 +117,8 @@ for index_name, index_data in indexes.items():
 print("Creating unique index on content_url ...")
 collection.create_index("content_url", unique=True, sparse=True)
 
+batch_size = 1000
+operations = []
 updated = 0
 skipped = 0
 errors = 0
@@ -128,21 +130,23 @@ for doc in cursor:
         skipped += 1
         continue
     new_content_url = BASE_URL.format(token=token)
-    try:
-        collection.update_one(
+    operations.append(
+        UpdateOne(
             {"_id": doc["_id"]},
-            {"$set": {"content_url": new_content_url}, "$unset": {"post_token": ""}},
+            {"$set": {"content_url": new_content_url}, "$unset": {"post_token": ""}}
         )
-        updated += 1
-    except DuplicateKeyError:
-        print(f"⚠️ Duplicate content_url detected, skipping: {new_content_url}")
-        skipped += 1
-    except Exception as e:
-        print(f"❌ Error updating {token}: {e}")
-        errors += 1
-cursor.close()
+    )
+    if len(operations) == batch_size:
+        result = collection.bulk_write(operations, ordered=False)
+        updated += result.modified_count
+        operations = []
 
-print("----- Migration Completed -----")
+# Write remaining operations
+if operations:
+    result = collection.bulk_write(operations, ordered=False)
+    updated += result.modified_count
+
+cursor.close()
 print(f"✅ Updated: {updated}")
 print(f"⚠️ Skipped (duplicates or empty): {skipped}")
 print(f"❌ Errors: {errors}")
