@@ -1,13 +1,17 @@
 import os
+
+from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
-from dotenv import load_dotenv
 
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
+print(MONGO_URI)
+print(MONGO_DB)
+print(MONGO_COLLECTION)
 
 BASE_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
 
@@ -45,8 +49,8 @@ for doc in cursor:
             {"_id": doc["_id"]},
             {
                 "$set": {"content_url": new_content_url},
-                "$unset": {"post_token": ""}  # del post_token
-            }
+                "$unset": {"post_token": ""},  # del post_token
+            },
         )
         updated += 1
     except DuplicateKeyError:
