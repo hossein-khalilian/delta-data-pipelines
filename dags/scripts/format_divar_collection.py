@@ -107,7 +107,6 @@ client = MongoClient(MONGO_URI)
 db = client[MONGO_DB]
 collection = db[MONGO_COLLECTION]
 
-
 indexes = collection.index_information()
 for index_name, index_data in indexes.items():
     if "post_token" in index_data["key"][0]:
@@ -123,23 +122,38 @@ updated = 0
 skipped = 0
 errors = 0
 
-cursor = collection.find({"post_token": {"$exists": True}}, no_cursor_timeout=True)
+cursor = collection.find({}, no_cursor_timeout=True)
 for doc in cursor:
+    # اگر content_url از قبل موجود است، رد می‌کنیم
+    if "content_url" in doc and doc["content_url"]:
+        skipped += 1
+        continue
+
     token = doc.get("post_token")
     if not token:
         skipped += 1
         continue
+
     new_content_url = BASE_URL.format(token=token)
+    
+    # بررسی وجود URL در دیتابیس
+    if collection.find_one({"content_url": new_content_url}):
+        skipped += 1
+        continue
+
     operations.append(
         UpdateOne(
             {"_id": doc["_id"]},
             {"$set": {"content_url": new_content_url}, "$unset": {"post_token": ""}}
         )
     )
+
     if len(operations) == batch_size:
         result = collection.bulk_write(operations, ordered=False)
         updated += result.modified_count
         operations = []
+
+
 
 # Write remaining operations
 if operations:
