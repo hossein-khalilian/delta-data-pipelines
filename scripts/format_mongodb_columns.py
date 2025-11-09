@@ -3,76 +3,70 @@ from pymongo import MongoClient
 from datetime import datetime
 from dateutil import parser 
 import re
+from dotenv import load_dotenv
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://appuser:appassword@172.16.36.111:27017/delta-datasets")
-MONGO_DB = os.getenv("MONGO_DB", "delta-datasets")
-MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "divar-dataset")
+load_dotenv()
+
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB = os.getenv("MONGO_DB")
+MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 
 LIMIT_DATE = datetime(2025, 11, 4)
 RESET_DATE = datetime(2025, 10, 21, 0, 0, 0)
+
+def persian_to_english_digits(value):
+    if not isinstance(value, str):
+        return value
+    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
+    arabic_digits = "٠١٢٣٤٥٦٧٨٩"
+    for i in range(10):
+        value = value.replace(persian_digits[i], str(i)).replace(arabic_digits[i], str(i))
+    return value
 
 def try_parse_float(value):
     if not isinstance(value, str):
         return value
 
-    value = re.sub(r"[\u200E\u200F]", "", value)
-
-    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
-    arabic_digits = "٠١٢٣٤٥٦٧٨٩"
-    for i, (p, a) in enumerate(zip(persian_digits, arabic_digits)):
-        value = value.replace(p, str(i)).replace(a, str(i))
-
-    value = re.sub(r"[,\s٬،]", "", value)
+    value = persian_to_english_digits(value)
+    value = re.sub(r"[\u200E\u200F,\s٬،]", "", value)
 
     try:
         num = float(value)
-
-        if num.is_integer():
-            return int(num)
-        return num
+        return int(num) if num.is_integer() else num
     except ValueError:
         return value
-
 
 def try_parse_datetime(value):
     if isinstance(value, str):
         try:
-            return parser.parse(value)
+            return parser.parse(persian_to_english_digits(value))
         except Exception:
             return value
     return value
 
 def normalize_more_than_value(value):
-    """
-    اگر مقدار به شکل 'بیشتر از X' بود → 'X+'
-    این تابع هم برای unit_per_floor و هم برای rooms_count کاربرد دارد.
-    """
     if not isinstance(value, str):
         return value
 
-    import re
-
-    # حذف فاصله‌ها و کاراکترهای نامرئی
+    value = persian_to_english_digits(value)
     value = re.sub(r"[\u200E\u200F\s]", "", value)
 
-    # بررسی وجود عبارت 'بیشتر'
-    if "بیشتر" not in value:
-        return value
-
-    # تبدیل ارقام فارسی/عربی به انگلیسی
-    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
-    arabic_digits = "٠١٢٣٤٥٦٧٨٩"
-    for i, (p, a) in enumerate(zip(persian_digits, arabic_digits)):
-        value = value.replace(p, str(i)).replace(a, str(i))
-
-    # استخراج عدد از رشته
-    match = re.search(r"(\d+)", value)
-    if match:
-        num = match.group(1)
-        return f"{num}+"
-
-    # اگر عددی پیدا نشد، همان مقدار اصلی را برگردان
+    if "بیشتراز" in value or "بیشتر" in value:
+        match = re.search(r"(\d+)", value)
+        if match:
+            return f"{match.group(1)}+"
     return value
+
+def normalize_construction_year(value):
+    if not isinstance(value, str):
+        return value
+    
+    cleaned = persian_to_english_digits(value).replace(" ", "")
+
+    if "قبل" in cleaned and "1370" in cleaned:
+        return -1370
+    
+    return try_parse_float(cleaned)
 
 def clean_document(doc):
     new_doc = {}
@@ -86,13 +80,28 @@ def clean_document(doc):
         if key == "crawl_timestamp":
             continue
 
-        if key in ["unit_per_floor", "rooms_count"]:
-            value = normalize_more_than_value(value)
-
         if value == "null":
             value = None
 
-        # float
+        # 1. rooms_count → "بدون اتاق" -> 0
+        if key == "rooms_count":
+            if isinstance(value, str) and "بدون" in value:
+                value = 0
+            else:
+                value = normalize_more_than_value(value)
+
+        # 2. unit_per_floor normalize بیشتر از X → X+
+        if key == "unit_per_floor":
+            value = normalize_more_than_value(value)
+
+        # 3. construction_year normalize قبل از ۱۳۷۰ → -1370
+        if key == "construction_year":
+            value = normalize_construction_year(value)
+
+        # 4. تبدیل همه اعداد فارسی → انگلیسی
+        value = persian_to_english_digits(value)
+
+        # Float parsing
         value = try_parse_float(value)
 
         if key == "record_timestamp":

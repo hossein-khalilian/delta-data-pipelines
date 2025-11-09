@@ -46,8 +46,7 @@ def extract_publish_time(data):
     if title_section:
         # LEGEND_TITLE_ROW 
         legend_widget = next(
-            (w for w in title_section.get("widgets", [])
-             if w.get("widget_type") == "LEGEND_TITLE_ROW"),
+            (w for w in title_section.get("widgets", []) if w.get("widget_type") == "LEGEND_TITLE_ROW"),
             None
         )
 
@@ -343,9 +342,13 @@ def transform_data(data: dict) -> dict:
                 value = item.get("value", "")
                 if "اتاق" in title:
                     doc["rooms_count"] = value
+                    
+                    # تبدیل "بدون اتاق" → 0
+                    if doc["rooms_count"] == "بدون اتاق":
+                        doc["rooms_count"] = "0"
+                    
                     break
-            if doc["rooms_count"] != None:
-                break
+            
     for widget in widgets:
         if (
             widget.get("widget_type") == "UNEXPANDABLE_ROW"
@@ -369,6 +372,12 @@ def transform_data(data: dict) -> dict:
         ),
         None,
     )
+    if doc["unit_per_floor"]:
+        txt = persian_to_english_digits(doc["unit_per_floor"])
+        match = re.search(r"بیشتر از\s*(\d+)", txt)
+        if match:
+            doc["unit_per_floor"] = "+" + match.group(1)
+
     features_map = {
         "آسانسور": "has_elevator",
         "پارکینگ": "has_parking",
@@ -508,6 +517,11 @@ def transform_data(data: dict) -> dict:
                         title = item.get("title", "") or ""
                         if title == "ساخت":
                             doc["construction_year"] = item.get("value", None)
+                            if doc["construction_year"]:
+                                val = persian_to_english_digits(doc["construction_year"])
+                                if "قبل" in val:
+                                    doc["construction_year"] = "-1370"
+
                 if widget.get("widget_type") == "UNEXPANDABLE_ROW":
                     mdata = widget.get("data", {}) or {}
                     title = mdata.get("title", "") or ""
@@ -568,5 +582,28 @@ def transform_data(data: dict) -> dict:
                         if img:
                             images.append(img)
     doc["images"] = list(dict.fromkeys(images))
+        
+    fields_to_float = [
+        "rent_value", "price_value", "credit_value",
+        "transformable_credit", "transformed_credit",
+        "transformable_rent", "transformed_rent",
+        "land_size", "building_size", "floor", "rooms_count",
+        "total_floors_count", "unit_per_floor", "construction_year",
+        "regular_person_capacity", "extra_person_capacity",
+        "cost_per_extra_person", "rent_price_on_regular_days",
+        "rent_price_on_special_days", "rent_price_at_weekends",
+        "location_latitude", "location_longitude", "location_radius"
+    ]
+
+    for f in fields_to_float:
+        val = doc.get(f)
+        if val not in [None, "", False]:
+            val_str = persian_to_english_digits(str(val))
+            val_str = re.sub(r"[^\d\.\+\-]", "", val_str)
+            try:
+                doc[f] = float(val_str)
+            except:
+                doc[f] = None
+
     return doc
 

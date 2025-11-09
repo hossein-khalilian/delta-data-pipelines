@@ -1,10 +1,13 @@
 import os
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
+from dotenv import load_dotenv
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://appuser:appassword@172.16.36.111:27017/delta-datasets")
-MONGO_DB = os.getenv("MONGO_DB", "delta-datasets")
-MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "crawl.1")
+load_dotenv()
+
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB = os.getenv("MONGO_DB")
+MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 
 BASE_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
 
@@ -20,14 +23,14 @@ for index_name, index_data in indexes.items():
         print(f"🗑 Removing old index: {index_name}")
         collection.drop_index(index_name)
 
-print("🔧 Creating unique index on content_url ...")
+print(" Creating unique index on content_url ...")
 collection.create_index("content_url", unique=True, sparse=True)
 
 updated = 0
 skipped = 0
 errors = 0
 
-cursor = collection.find({"post_token": {"$exists": True}}, no_cursor_timeout=True)
+cursor = collection.find({"post_token": {"exists": True}}, no_cursor_timeout=True)
 
 for doc in cursor:
     token = doc.get("post_token")
