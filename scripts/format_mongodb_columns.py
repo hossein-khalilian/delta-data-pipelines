@@ -35,11 +35,19 @@ def try_parse_float(value):
         return int(num) if num.is_integer() else num
     except ValueError:
         return value
-
+    
 def try_parse_datetime(value):
     if isinstance(value, str):
+        value = persian_to_english_digits(value).strip()
+
+        # اگر بین تاریخ و ساعت فاصله وجود نداشت مثل: 2025-10-2114:20:31
+        # اضافه کردن فاصله قبل از ساعت
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})(\d{2}:\d{2}:\d{2})$", value)
+        if m:
+            value = f"{m.group(1)} {m.group(2)}"
+
         try:
-            return parser.parse(persian_to_english_digits(value))
+            return parser.parse(value)
         except Exception:
             return value
     return value
@@ -83,28 +91,23 @@ def clean_document(doc):
         if value == "null":
             value = None
 
-        # 1. rooms_count → "بدون اتاق" -> 0
         if key == "rooms_count":
             if isinstance(value, str) and "بدون" in value:
                 value = 0
             else:
                 value = normalize_more_than_value(value)
 
-        # 2. unit_per_floor normalize بیشتر از X → X+
         if key == "unit_per_floor":
             value = normalize_more_than_value(value)
 
-        # 3. construction_year normalize قبل از ۱۳۷۰ → -1370
         if key == "construction_year":
             value = normalize_construction_year(value)
 
-        # 4. تبدیل همه اعداد فارسی → انگلیسی
         value = persian_to_english_digits(value)
 
-        # Float parsing
         value = try_parse_float(value)
 
-        if key == "record_timestamp":
+        if key in ["record_timestamp", "created_at"]:
             new_key = "created_at"
             value = try_parse_datetime(value)
         else:
