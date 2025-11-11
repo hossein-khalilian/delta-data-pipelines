@@ -17,7 +17,7 @@ def extract_transform_urls(**kwargs):
     # Bloom filter
     if not rdb.exists(BLOOM_KEY):
         try:
-            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000)
+            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2)
             print(f"✅ Bloom filter named {BLOOM_KEY} has been created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
@@ -46,7 +46,7 @@ def extract_transform_urls(**kwargs):
     }
 
     all_tokens = []
-    max_pages = 100
+    max_pages = 50
 
     stop_condition = False
 
