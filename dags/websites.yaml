@@ -1,0 +1,11 @@
+# websites.yaml
+websites:
+  - name: divar
+    url: "https://example.com"
+    crawler_schedule: "*/5 * * * *"
+    fethcer_schedule: "*/3 * * * *"
+    parser: "example_parser"
+  - name: wikipedia
+    url: "https://en.wikipedia.org"
+    schedule: "0 6 * * *"
+    parser: "wiki_parser"
