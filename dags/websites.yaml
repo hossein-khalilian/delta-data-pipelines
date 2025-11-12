@@ -1,10 +1,13 @@
 # websites.yaml
 websites:
   - name: divar
-    url: "https://example.com"
+    url: "https://divar.ir"
     crawler_schedule: "*/5 * * * *"
     fethcer_schedule: "*/3 * * * *"
-    parser: "example_parser"
+    parser: "divar.utils.divar_parser.parse_divar"
+    # queue_name: "divar_queue"
+    # batch_siza: "40"
+    
   - name: wikipedia
     url: "https://en.wikipedia.org"
     schedule: "0 6 * * *"

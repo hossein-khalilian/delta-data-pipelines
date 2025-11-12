@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta
+import importlib
 
 import yaml
 from airflow import DAG
@@ -11,7 +12,6 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 
 with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
-
 
 def load_function_with_path(path: str):
     """Dynamically import a parser function from a string path."""
@@ -28,9 +28,9 @@ def load_function(website_conf, **kwargs):
     pass
 
 
-def create_dag(website_conf):
+def create_crawler_dag(website_conf):
     dag_id = f"crawl_{website_conf['name']}"
-    schedule = website_conf.get("schedule", "@daily")
+    schedule = website_conf.get("crawler_schedule", "@daily")
 
     default_args = {
         "owner": "airflow",
@@ -65,6 +65,7 @@ def create_dag(website_conf):
             task_id="load_task",
             python_callable=produce_to_rabbitmq,
             provide_context=True,
+            op_kwargs={"website_conf": website_conf},
         )
 
         # Producer DAG graph
@@ -85,4 +86,4 @@ def create_dag(website_conf):
 # --- Register each website as its own DAG ---
 for website in config["websites"]:
     dag_id = f"crawl_{website['name']}"
-    globals()[dag_id] = create_dag(website)
+    globals()[dag_id] = create_crawler_dag(website)
