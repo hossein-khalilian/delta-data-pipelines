@@ -26,7 +26,7 @@ def fetcher_function(**kwargs):
                     resp = await client.get(url)
                     resp.raise_for_status()
                     fetched.append({"content_url": url, "data": resp.json()})
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(2)
                 except Exception as e:
                     print(f"Fetch error {url}: {e}")
             return fetched

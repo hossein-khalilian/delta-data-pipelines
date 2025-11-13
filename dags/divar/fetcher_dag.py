@@ -30,7 +30,7 @@ consumer_dag = DAG(
 rabbitmq_sensor_task = RabbitMQSensor(
     task_id="rabbitmq_sensor_task",
     queue_name=config["rabbitmq_queue"],
-    batch_size=40,  
+    batch_size=50,  
     timeout=600,  
     dag=consumer_dag,
 )
