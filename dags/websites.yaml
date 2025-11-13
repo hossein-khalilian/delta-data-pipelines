@@ -3,9 +3,8 @@ websites:
   - name: divar
     url: "https://divar.ir"
     crawler_schedule: "*/5 * * * *"
-    fethcer_schedule: "*/3 * * * *"
+    fethcer_schedule: "*/2 * * * *"
     parser: "divar.utils.divar_parser.parse_divar"
-    # queue_name: "divar_queue"
     # batch_siza: "40"
     
   - name: wikipedia

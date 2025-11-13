@@ -20,7 +20,7 @@ consumer_dag = DAG(
     "divar_fetcher",
     default_args=default_args,
     description="Consume and fetch messages from RabbitMQ",
-    schedule_interval="*/3 * * * *",
+    schedule_interval="*/2 * * * *",
     catchup=False,
     max_active_runs=1,
     concurrency=1, 
