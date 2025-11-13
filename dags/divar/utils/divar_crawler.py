@@ -45,7 +45,7 @@ def extract_transform_urls(**kwargs):
         "headers": parsed_curl.pop("headers", {}),
     }
 
-    all_tokens = []
+    all_urls = []
     max_pages = 50
 
     stop_condition = False
@@ -122,12 +122,12 @@ def extract_transform_urls(**kwargs):
                     stop_condition = True
                     
                 if not stop_condition:
-                    all_tokens_to_push = new_tokens + duplicate_tokens
+                    all_urls_to_push = new_tokens + duplicate_tokens
                 else:
-                    all_tokens_to_push = new_tokens 
+                    all_urls_to_push = new_tokens 
             
-                new_urls = [{"content_url": f"https://api.divar.ir/v8/posts-v2/web/{t}"} for t in all_tokens_to_push]
-                all_tokens.extend(new_urls)
+                new_urls = [{"content_url": f"https://api.divar.ir/v8/posts-v2/web/{t}"} for t in all_urls_to_push]
+                all_urls.extend(new_urls)
 
                 if stop_condition:
                     break
@@ -144,11 +144,12 @@ def extract_transform_urls(**kwargs):
                 print(f"❌ Error requesting page {page}: {e}")
                 break
 
-    kwargs["ti"].xcom_push(key="extracted_urls", value=list(all_tokens))
-    print(f"✅ Extraction completed — {len(all_tokens)} new urls pushed to XCom.")
+    # kwargs["ti"].xcom_push(key="extracted_urls", value=list(all_urls))
+    print(f"✅ Extraction completed — {len(all_urls)} new urls extracted")
+    return list(all_urls)
 
-def produce_to_rabbitmq(**kwargs):
-    urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
+def produce_to_rabbitmq(urls):
+    # urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
     if not urls:
         print("No URLs to send.")
         return

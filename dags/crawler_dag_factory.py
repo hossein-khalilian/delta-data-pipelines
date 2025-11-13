@@ -1,7 +1,6 @@
 import os
 from datetime import datetime, timedelta
 import importlib
-
 import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -19,18 +18,20 @@ def load_function_with_path(path: str):
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
 
-
-def extract_function(website_conf, **kwargs):
-    extract_transform_urls(**kwargs)
-
+def extract_transform_function(website_conf, **kwargs):
+    all_urls = extract_transform_urls(**kwargs) 
+    kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
+    # kwargs["ti"].xcom_push(key="extracted_urls")
+    # extract_transform_urls(**kwargs)
 
 def load_function(website_conf, **kwargs):
-    pass
+    urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
+    produce_to_rabbitmq(urls)
 
 
 def create_crawler_dag(website_conf):
     dag_id = f"crawl_{website_conf['name']}"
-    schedule = website_conf.get("crawler_schedule", "@daily")
+    schedule = website_conf.get("crawler_schedule")
 
     default_args = {
         "owner": "airflow",
@@ -56,14 +57,14 @@ def create_crawler_dag(website_conf):
         # Producer DAG tasks
         extract_transform_task = PythonOperator(
             task_id="extract_transform_task",
-            python_callable=extract_function,
+            python_callable=extract_transform_function,
             provide_context=True,
             op_kwargs={"website_conf": website_conf},
         )
 
         load_task = PythonOperator(
             task_id="load_task",
-            python_callable=produce_to_rabbitmq,
+            python_callable=load_function,
             provide_context=True,
             op_kwargs={"website_conf": website_conf},
         )
@@ -71,19 +72,9 @@ def create_crawler_dag(website_conf):
         # Producer DAG graph
         extract_transform_task >> load_task
 
-        # crawl_task = PythonOperator(
-        #     task_id="crawl",
-        #     python_callable=crawl_website,
-        #     op_kwargs={
-        #         "url": website_conf["url"],
-        #         "parser": website_conf.get("parser", "default_parser"),
-        #     },
-        # )
-
     return dag
 
-
-# --- Register each website as its own DAG ---
+# Register each website as its own DAG
 for website in config["websites"]:
     dag_id = f"crawl_{website['name']}"
     globals()[dag_id] = create_crawler_dag(website)
