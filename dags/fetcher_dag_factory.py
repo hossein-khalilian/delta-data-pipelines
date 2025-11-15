@@ -1,31 +1,64 @@
 import os
 from datetime import datetime, timedelta
 import importlib
-
 import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
-from utils.config import config, RABBITMQ_HOST, RABBITMQ_PORT, MONGODB_URI
+from utils.config import config
 from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
 from divar.utils.divar_fetcher import fetcher_function, transformer_function
 from utils.mongodb_utils import store_to_mongo
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
+# RABBITMQ_HOST = "172.16.36.111"
+# RABBITMQ_PORT = "5672"
+# MONGODB_URI = "mongodb://ap/puser:appassword@172.16.36.111:27017/delta-datasets"
 
+# Load YAML config
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
+
+def load_function_with_path(path: str):
+    module_path, func_name = path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, func_name)
+
+def sensor_function(website_conf, **context):
+    """Waits for messages in RabbitMQ."""
+    return RabbitMQSensor(
+        task_id="sensor_task",
+        queue_name=website_conf["queue_name"],
+        batch_size=website_conf.get("batch_size", 50),
+        # host=RABBITMQ_HOST,
+        # port=RABBITMQ_PORT,
+        timeout=600,
+    )
+
+def extract_function(website_conf, **kwargs):
+    messages = kwargs["ti"].xcom_pull(task_ids="sensor_task", key="return_value")
+    fetched = fetcher_function(messages)
+    kwargs["ti"].xcom_push(key="fetched_data", value=fetched)
+    # fetcher_function(**kwargs)
+
+def transform_function(website_conf, **kwargs):
+    fetched = kwargs["ti"].xcom_pull(task_ids="fetch_task", key="fetched_data")
+    transformed = transformer_function(fetched)
+    kwargs["ti"].xcom_push(key="transform_data", value=transformed)
+
+def load_function(website_conf, **kwargs):
+    transformed_data = kwargs["ti"].xcom_pull(key="transform_data", task_ids="transform_task")  
+    store_to_mongo(transformed_data, collection_name=website_conf.get("mongo_collection"))
+
 
 def create_fetcher_dag(website_conf):
     dag_id = f"fetch_{website_conf['name']}"
     schedule = website_conf.get("fetcher_schedule", None)
 
-    # if not schedule:
-    #     return None 
-
     default_args = {
         "owner": "airflow",
         "depends_on_past": False,
+        "email_on_failure": False,
+        "email_on_retry": False,
         "retries": 2,
         "retry_delay": timedelta(minutes=1),
         "start_date": datetime(2024, 1, 1),
@@ -42,46 +75,39 @@ def create_fetcher_dag(website_conf):
         tags=["fetcher", website_conf["name"]],
     ) as dag:
 
-        sensor = RabbitMQSensor(
-            task_id="wait_for_messages",
-            queue_name=website["queue_name"],
-            batch_size=website.get("batch_size", 10),
-            host=RABBITMQ_HOST,
-            port=RABBITMQ_PORT,
+        sensor_task = RabbitMQSensor(
+            task_id="sensor_task",
+            queue_name=website_conf["queue_name"],
+            batch_size=website_conf.get("batch_size", 50),
             timeout=600,
-            dag=dag,
         )
 
-        fetch = PythonOperator(
-            task_id="fetch",
-            python_callable=fetcher_function,
+        fetch_task = PythonOperator(
+            task_id="fetch_task",
+            python_callable=extract_function,
             provide_context=True,
             op_kwargs={"website_conf": website_conf},
-            dag=dag,
         )
 
-        transform = PythonOperator(
-            task_id="transform",
-            python_callable=transformer_function,
+        transform_task = PythonOperator(
+            task_id="transform_task",
+            python_callable=transform_function,
             provide_context=True,
             op_kwargs={"website_conf": website_conf},
-            dag=dag,
         )
 
-        load = PythonOperator(
-            task_id="store_to_mongo",
-            python_callable=store_to_mongo,
+        load_task = PythonOperator(
+            task_id="load_task",
+            python_callable=load_function,
             provide_context=True,
             op_kwargs={"website_conf": website_conf},
-            dag=dag,
         )
 
-        sensor >> fetch >> transform >> load
+        sensor_task >> fetch_task >> transform_task >> load_task
 
     return dag
 
-
+# Register each website as its own DAG
 for website in config["websites"]:
-    fetcher_dag = create_fetcher_dag(website)
-    if fetcher_dag:
-        globals()[f"fetch_{website['name']}"] = fetcher_dag
+    dag_id = f"fetch_{website['name']}"
+    globals()[dag_id] = create_fetcher_dag(website)

@@ -5,20 +5,20 @@ from divar.utils.divar_transformer import transform_data
 DIVAR_API_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
 
 # fetcher_function
-def fetcher_function(**kwargs):
-    fetched_messages = kwargs["ti"].xcom_pull(
-        key="return_value", task_ids="rabbitmq_sensor_task"
-    )
+def fetcher_function(messages):
+    # fetched_messages = kwargs["ti"].xcom_pull(
+    #     key="return_value", task_ids="rabbitmq_sensor_task"
+    # )
 
-    if not fetched_messages:
+    if not messages:
         print("No messages available from Sensor.")
-        return
+        return []
 
     async def fetch_all(messages):
         async with httpx.AsyncClient(verify=True) as client:
             fetched = []
             for index, msg in enumerate(messages, start=1):
-                print(f"{index}")
+                print(index)
                 
                 url = msg["content_url"]
                 
@@ -31,20 +31,21 @@ def fetcher_function(**kwargs):
                     print(f"Fetch error {url}: {e}")
             return fetched
 
-    fetched_data = asyncio.run(fetch_all(fetched_messages))
+    fetched_data = asyncio.run(fetch_all(messages))
     if fetched_data:
-        kwargs["ti"].xcom_push(key="fetched_data", value=fetched_data)
+    #     kwargs["ti"].xcom_push(key="fetched_data", value=fetched_data)
         print(f"✅ Processed {len(fetched_data)} items")
     else:
         print("No data fetched from API.")
+    return fetched_data
 
-def transformer_function(**kwargs):
-    fetched_data = kwargs["ti"].xcom_pull(
-        key="fetched_data", task_ids="fetch_task"
-    )
+def transformer_function(fetched_data):
+    # fetched_data = kwargs["ti"].xcom_pull(
+    #     key="fetched_data", task_ids="fetch_task"
+    # )
     if not fetched_data:
-        print("⚠️No data available for transformation.")
-        return
+        print("⚠️No data for transformation.")
+        return []
 
     transformed_data = []
     for item in fetched_data:
@@ -60,4 +61,6 @@ def transformer_function(**kwargs):
         
     print(f"✅ Transformed {len(transformed_data)} items.")
 
-    kwargs["ti"].xcom_push(key="transform_data", value=transformed_data)
+    return transformed_data
+
+    # kwargs["ti"].xcom_push(key="transform_data", value=transformed_data)

@@ -6,6 +6,7 @@ websites:
     fetcher_schedule: "*/2 * * * *"
     parser: "divar.utils.divar_parser.parse_divar"
     queue_name: "divar_tokens_queue3"
+    mongo_collection: "crawl.3"
     # batch_size: 40
 
   # - name: wikipedia

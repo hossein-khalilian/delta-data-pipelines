@@ -1,19 +1,26 @@
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
-
 from utils.config import config
 
-def store_to_mongo(**kwargs):
-    transformed_data = kwargs["ti"].xcom_pull(
-        key="transform_data", task_ids="transform_task"
-    )
+def store_to_mongo(transformed_data, collection_name=None):
+    # transformed_data = kwargs["ti"].xcom_pull(
+    #     key="transform_data", task_ids="transform_task"
+    # )
     if not transformed_data:
         print("No data available to store in MongoDB.")
-        return
+        return 0
+
+    if not collection_name:
+        raise ValueError("❌ Error: collection_name must be provided ")
 
     client = MongoClient(config["mongo_uri"])
     db = client[config["mongo_db"]]
-    collection = db[config["mongo_collection"]]
+    # collection = db[config["mongo_collection"]]
+    collection = db[collection_name]
+
+    # اگر ورودی داده نشده بود، مقدار پیش‌فرض از config برداشته می‌شود
+    # collection_name = collection_name or config["mongo_collection"]
+    # collection = db[collection_name]
     
     saved_count = 0
     
@@ -37,6 +44,8 @@ def store_to_mongo(**kwargs):
                 print(f"Error while saving {transformed.get('content_url')}: {e}")
                 
         print(f"✅ Saved {saved_count} new records in MongoDB")
-
+        
+        return saved_count 
+    
     finally:
         client.close()
