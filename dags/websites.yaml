@@ -5,16 +5,16 @@ websites:
     crawler_schedule: "*/5 * * * *"
     fetcher_schedule: "*/2 * * * *"
     parser: "divar.utils.divar_parser.parse_divar"
-    queue_name: "divar_tokens_queue3"
-    mongo_collection: "divar_crawl.3"
-    redis_bloom_filter: "divar_tokens_bloom3"
+    queue_name: "divar_tokens_queue"
+    mongo_collection: "divar-dataset"
+    redis_bloom_filter: "divar_tokens"
 
-  - name: sheypoor
-    url: "https://www.sheypoor.com/"
-    crawler_schedule: "*/5 * * * *"
-    fetcher_schedule: "*/2 * * * *"
-    parser: "sheypoor.utils.sheypoor_parser.parse_sheypoor"
-    queue_name: "sheypoor_tokens_queue3"
-    mongo_collection: "sheypoor.crawl.3"
-    redis_bloom_filter: "sheypoor_tokens_bloom3"
+  # - name: sheypoor
+  #   url: "https://www.sheypoor.com/"
+  #   crawler_schedule: "*/5 * * * *"
+  #   fetcher_schedule: "*/2 * * * *"
+  #   parser: "sheypoor.utils.sheypoor_parser.parse_sheypoor"
+  #   queue_name: "sheypoor_tokens_queue3"
+  #   mongo_collection: "sheypoor.crawl.3"
+  #   redis_bloom_filter: "sheypoor_tokens_bloom3"
 
