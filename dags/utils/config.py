@@ -16,7 +16,7 @@ ENV_VARS = [
     "RABBITMQ_PORT",
     "RABBITMQ_USER",
     "RABBITMQ_PASS",
-    "RABBITMQ_QUEUE",
+    "RABBITMQ_URLS_QUEUE",
 ]
 
 config = {var.lower(): os.getenv(var) for var in ENV_VARS}

@@ -1,16 +1,18 @@
+import importlib
 import os
 from datetime import datetime, timedelta
-import importlib
+
 import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
-from divar.utils.divar_crawler import extract_transform_urls, produce_to_rabbitmq
+from utils.config import config
+from utils.rabbitmq_utils import publish_messages
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 
 with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
+
 
 def load_function_with_path(path: str):
     """Dynamically import a parser function from a string path."""
@@ -18,13 +20,22 @@ def load_function_with_path(path: str):
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
 
+
 def extract_transform_function(website_conf, **kwargs):
-    all_urls = extract_transform_urls(website_conf=website_conf, **kwargs) 
+    func_path = website_conf["crawler"]
+    crawler_func = load_function_with_path(func_path)
+    all_urls = crawler_func()
     kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
 
+
 def load_function(website_conf, **kwargs):
-    urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
-    produce_to_rabbitmq(urls, website_conf["queue_name"])
+    urls = kwargs["ti"].xcom_pull(
+        key="extracted_urls", task_ids="extract_transform_task"
+    )
+    publish_messages(
+        urls, f"{website_conf['name']}_{config.get('rabbitmq_urls_queue')}"
+    )
+
 
 def create_crawler_dag(website_conf):
     dag_id = f"crawl_{website_conf['name']}"
@@ -70,6 +81,7 @@ def create_crawler_dag(website_conf):
         extract_transform_task >> load_task
 
     return dag
+
 
 # Register each website as its own DAG
 for website in config["websites"]:

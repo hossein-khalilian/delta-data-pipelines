@@ -1,22 +1,25 @@
 import asyncio
 import json
 import time
-from urllib.parse import parse_qs, urlsplit
-
 import httpx
 import redis
+from urllib.parse import parse_qs, urlsplit
 from curl2json.parser import parse_curl
-from config import config
-
+from utils.config import config
 
 def extract_transform_urls(**kwargs):
-    BLOOM_KEY = config["redis_bloom_filter"]
+    website_conf = kwargs["website_conf"]                   # from DAG Factory 
+    BLOOM_KEY = website_conf["redis_bloom_filter"]            # from YAML 
+    
+    print(f"Using Bloom Filter: {BLOOM_KEY}")
+    print(config["redis_host"])
+    print(config["redis_port"])
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     # Bloom filter
     if not rdb.exists(BLOOM_KEY):
         try:
-            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000)
+            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2)
             print(f"Bloom filter named {BLOOM_KEY} has been created")
         except Exception as e:
             print(f"Error creating Bloom filter: {e}")
@@ -25,7 +28,7 @@ def extract_transform_urls(**kwargs):
 
     # curl command
     try:
-        with open("./airflow/dags/sheypoor_curl_command.txt", "r", encoding="utf-8") as file:
+        with open("./dags/sheypoor/utils/curl_commands/sheypoor_curl_command.txt", "r", encoding="utf-8") as file:
             curl_command = file.read()
         print("✅ File sheypoor_curl_command.txt was read successfully")
     except Exception as e:
@@ -40,7 +43,7 @@ def extract_transform_urls(**kwargs):
     client_params = {
         "verify": True,
         "headers": parsed_curl.get("headers", {}),
-        "timeout": 20,
+        # "timeout": 20,
     }
 
     # BASE URL
@@ -87,6 +90,10 @@ def extract_transform_urls(**kwargs):
                 duplicate_ads_batch = []
 
                 for item in items:
+                    
+                    if item.get("type") != "normal":
+                        continue
+                    
                     item_id = item.get("id")
                     attr = item.get("attributes", {})
                     url = attr.get("url")

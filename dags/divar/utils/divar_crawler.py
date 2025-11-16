@@ -1,18 +1,17 @@
 import asyncio
 import json
 import time
+
 import httpx
 import redis
 from curl2json.parser import parse_curl
-from utils.rabbitmq.rabbitmq_utils import publish_tokens
 from utils.config import config
 
+
 # ETL for crawler DAG
-def extract_transform_urls(**kwargs):
-    # BLOOM_KEY = config["redis_bloom_filter"]
-    website_conf = kwargs["website_conf"]                   # این از DAG Factory میاد
-    BLOOM_KEY = website_conf["redis_bloom_filter"]            # از YAML خونده می‌شه
-    
+def extract_transform_urls():
+    BLOOM_KEY = f"diver_{config.get('redis_bloom_filter')}"
+
     print(f"Using Bloom Filter: {BLOOM_KEY}")
     print(config["redis_host"])
     print(config["redis_port"])
@@ -21,7 +20,9 @@ def extract_transform_urls(**kwargs):
     # Bloom filter
     if not rdb.exists(BLOOM_KEY):
         try:
-            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2)
+            rdb.execute_command(
+                "BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2
+            )
             print(f"✅ Bloom filter named {BLOOM_KEY} has been created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
@@ -116,7 +117,6 @@ def extract_transform_urls(**kwargs):
                         new_tokens.append(token)
                         rdb.execute_command("BF.ADD", BLOOM_KEY, token)
 
-
                 ratio = duplicate_count / len(tokens) if tokens else 1
                 print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
@@ -124,18 +124,21 @@ def extract_transform_urls(**kwargs):
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
                     # break
                     stop_condition = True
-                    
+
                 if not stop_condition:
                     all_urls_to_push = new_tokens + duplicate_tokens
                 else:
-                    all_urls_to_push = new_tokens 
-            
-                new_urls = [{"content_url": f"https://api.divar.ir/v8/posts-v2/web/{t}"} for t in all_urls_to_push]
+                    all_urls_to_push = new_tokens
+
+                new_urls = [
+                    {"content_url": f"https://api.divar.ir/v8/posts-v2/web/{t}"}
+                    for t in all_urls_to_push
+                ]
                 all_urls.extend(new_urls)
 
                 if stop_condition:
                     break
-                
+
                 # update pagination_data
                 pagination_info = result.get("pagination", {}) or {}
                 curl_data["pagination_data"] = pagination_info.get(
@@ -148,14 +151,5 @@ def extract_transform_urls(**kwargs):
                 print(f"❌ Error requesting page {page}: {e}")
                 break
 
-    # kwargs["ti"].xcom_push(key="extracted_urls", value=list(all_urls))
     print(f"✅ Extraction completed — {len(all_urls)} new urls extracted")
     return list(all_urls)
-
-def produce_to_rabbitmq(urls, queue_name):
-    # urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
-    if not urls:
-        print("No URLs to send.")
-        return
-    asyncio.run(publish_tokens(urls, queue_name=queue_name))
-
