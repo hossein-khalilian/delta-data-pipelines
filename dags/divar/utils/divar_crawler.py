@@ -9,7 +9,11 @@ from utils.config import config
 
 # ETL for crawler DAG
 def extract_transform_urls(**kwargs):
-    BLOOM_KEY = config["redis_bloom_filter"]
+    # BLOOM_KEY = config["redis_bloom_filter"]
+    website_conf = kwargs["website_conf"]                   # این از DAG Factory میاد
+    BLOOM_KEY = website_conf["redis_bloom_filter"]            # از YAML خونده می‌شه
+    
+    print(f"Using Bloom Filter: {BLOOM_KEY}")
     print(config["redis_host"])
     print(config["redis_port"])
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
@@ -148,10 +152,10 @@ def extract_transform_urls(**kwargs):
     print(f"✅ Extraction completed — {len(all_urls)} new urls extracted")
     return list(all_urls)
 
-def produce_to_rabbitmq(urls):
+def produce_to_rabbitmq(urls, queue_name):
     # urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
     if not urls:
         print("No URLs to send.")
         return
-    asyncio.run(publish_tokens(urls))
+    asyncio.run(publish_tokens(urls, queue_name=queue_name))
 

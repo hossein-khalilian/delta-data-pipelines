@@ -19,15 +19,12 @@ def load_function_with_path(path: str):
     return getattr(module, func_name)
 
 def extract_transform_function(website_conf, **kwargs):
-    all_urls = extract_transform_urls(**kwargs) 
+    all_urls = extract_transform_urls(website_conf=website_conf, **kwargs) 
     kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
-    # kwargs["ti"].xcom_push(key="extracted_urls")
-    # extract_transform_urls(**kwargs)
 
 def load_function(website_conf, **kwargs):
     urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
-    produce_to_rabbitmq(urls)
-
+    produce_to_rabbitmq(urls, website_conf["queue_name"])
 
 def create_crawler_dag(website_conf):
     dag_id = f"crawl_{website_conf['name']}"
