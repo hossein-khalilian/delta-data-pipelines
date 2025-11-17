@@ -1,6 +1,7 @@
 import importlib
 import os
 from datetime import datetime, timedelta
+import asyncio
 
 import yaml
 from airflow import DAG
@@ -32,9 +33,10 @@ def load_function(website_conf, **kwargs):
     urls = kwargs["ti"].xcom_pull(
         key="extracted_urls", task_ids="extract_transform_task"
     )
-    publish_messages(
-        urls, f"{website_conf['name']}_{config.get('rabbitmq_urls_queue')}"
-    )
+    queue_name = f"{website_conf['name']}_{config.get('rabbitmq_urls_queue', 'urls')}"
+    asyncio.run(publish_messages(urls, queue_name=queue_name))
+
+    print(f"Sent {len(urls)} URLs to queue: {queue_name}")
 
 
 def create_crawler_dag(website_conf):

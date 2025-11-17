@@ -5,13 +5,10 @@ import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from utils.config import config
-from utils.rabbitmq.rabbitmq_utils import RabbitMQSensor
+from utils.rabbitmq_utils import RabbitMQSensor
 from divar.utils.divar_fetcher import fetcher_function, transformer_function
 from utils.mongodb_utils import store_to_mongo
-
-# RABBITMQ_HOST = "172.16.36.111"
-# RABBITMQ_PORT = "5672"
-# MONGODB_URI = "mongodb://ap/puser:appassword@172.16.36.111:27017/delta-datasets"
+from utils.config import config
 
 # Load YAML config
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
@@ -36,19 +33,20 @@ def sensor_function(website_conf, **context):
 
 def extract_function(website_conf, **kwargs):
     messages = kwargs["ti"].xcom_pull(task_ids="sensor_task", key="return_value")
-    fetched = fetcher_function(messages)
+    fetcher_func = load_function_with_path(website_conf["fetcher"])   
+    fetched = fetcher_func(messages)
     kwargs["ti"].xcom_push(key="fetched_data", value=fetched)
-    # fetcher_function(**kwargs)
 
 def transform_function(website_conf, **kwargs):
     fetched = kwargs["ti"].xcom_pull(task_ids="fetch_task", key="fetched_data")
-    transformed = transformer_function(fetched)
+    transformer_func = load_function_with_path(website_conf["transformer"])  
+    transformed = transformer_func(fetched)
     kwargs["ti"].xcom_push(key="transform_data", value=transformed)
 
 def load_function(website_conf, **kwargs):
     transformed_data = kwargs["ti"].xcom_pull(key="transform_data", task_ids="transform_task")  
-    store_to_mongo(transformed_data, collection_name=website_conf.get("mongo_collection"))
-
+    collection_name = f"{website_conf['name']}.{config.get('mongo_collection', 'crawl')}"
+    store_to_mongo(transformed_data, collection_name=collection_name)
 
 def create_fetcher_dag(website_conf):
     dag_id = f"fetch_{website_conf['name']}"
@@ -75,9 +73,11 @@ def create_fetcher_dag(website_conf):
         tags=["fetcher", website_conf["name"]],
     ) as dag:
 
+        queue_name = f"{website_conf['name']}-{config.get('rabbitmq_urls_queue', 'urls')}"
+        
         sensor_task = RabbitMQSensor(
             task_id="sensor_task",
-            queue_name=website_conf["queue_name"],
+            queue_name=queue_name,
             batch_size=website_conf.get("batch_size", 50),
             timeout=600,
         )
