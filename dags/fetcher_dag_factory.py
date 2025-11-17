@@ -45,7 +45,7 @@ def transform_function(website_conf, **kwargs):
 
 def load_function(website_conf, **kwargs):
     transformed_data = kwargs["ti"].xcom_pull(key="transform_data", task_ids="transform_task")  
-    collection_name = f"{website_conf['name']}.{config.get('mongo_collection', 'crawl')}"
+    collection_name = f"{website_conf['name']}-{config.get('mongo_collection', 'dataset')}"
     store_to_mongo(transformed_data, collection_name=collection_name)
 
 def create_fetcher_dag(website_conf):
@@ -73,7 +73,7 @@ def create_fetcher_dag(website_conf):
         tags=["fetcher", website_conf["name"]],
     ) as dag:
 
-        queue_name = f"{website_conf['name']}-{config.get('rabbitmq_urls_queue', 'urls')}"
+        queue_name = f"{website_conf['name']}_{config.get('rabbitmq_urls_queue', 'urls')}"
         
         sensor_task = RabbitMQSensor(
             task_id="sensor_task",
