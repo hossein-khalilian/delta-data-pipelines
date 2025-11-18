@@ -15,12 +15,8 @@ def store_to_mongo(transformed_data, collection_name=None):
 
     client = MongoClient(config["mongo_uri"])
     db = client[config["mongo_db"]]
-    # collection = db[config["mongo_collection"]]
     collection = db[collection_name]
 
-    # اگر ورودی داده نشده بود، مقدار پیش‌فرض از config برداشته می‌شود
-    # collection_name = collection_name or config["mongo_collection"]
-    # collection = db[collection_name]
     
     saved_count = 0
     

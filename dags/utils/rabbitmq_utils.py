@@ -166,4 +166,4 @@ async def publish_messages(messages, queue_name: str = None):
                 ),
                 routing_key=queue.name,
             )
-    print(f"✅ Sent {len(messages)} URLs to RabbitMQ")
+    # print(f"✅ Sent {len(messages)} URLs to RabbitMQ")

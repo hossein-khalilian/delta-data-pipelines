@@ -7,15 +7,11 @@ websites:
     crawler: "divar.utils.divar_crawler.extract_transform_urls"
     fetcher: "divar.utils.divar_fetcher.fetcher_function"
     transformer: "divar.utils.divar_fetcher.transformer_function"
-    # producer: "divar.utils.divar_crawler.produce_to_rabbitmq"
 
-  # - name: sheypoor
-  #   url: "https://www.sheypoor.com/"
-  #   crawler_schedule: "*/5 * * * *"
-  #   fetcher_schedule: "*/2 * * * *"
-  #   fetcher: "sheypoor.utils.sheypoor_crawler.extract_transform_urls"
-  #   producer: "sheypoor.utils.sheypoor_crawler.produce_to_rabbitmq"
-  #   transforme: "sheypoor.utils.sheypoor_crawler.produce_to_rabbitmq"
-  #   queue_name: "sheypoor_tokens_queue3"
-  #   mongo_collection: "sheypoor.crawl.3"
-  #   redis_bloom_filter: "sheypoor_tokens_bloom3"
+  - name: sheypoor
+    url: "https://www.sheypoor.com/"
+    crawler_schedule: "*/5 * * * *"
+    fetcher_schedule: "*/2 * * * *"
+    crawler: "sheypoor.utils.sheypoor_crawler.extract_transform_urls"
+    fetcher: "sheypoor.utils.sheypoor_fetcher.fetcher_function"
+    transformer: "sheypoor.utils.sheypoor_fetcher.transformer_function"

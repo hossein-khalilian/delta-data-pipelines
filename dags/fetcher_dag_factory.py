@@ -13,7 +13,7 @@ from utils.config import config
 # Load YAML config
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 with open(CONFIG_PATH, "r") as f:
-    config = yaml.safe_load(f)
+    yamlconfig = yaml.safe_load(f)
 
 def load_function_with_path(path: str):
     module_path, func_name = path.rsplit(".", 1)
@@ -45,7 +45,7 @@ def transform_function(website_conf, **kwargs):
 
 def load_function(website_conf, **kwargs):
     transformed_data = kwargs["ti"].xcom_pull(key="transform_data", task_ids="transform_task")  
-    collection_name = f"{website_conf['name']}-{config.get('mongo_collection', 'dataset')}"
+    collection_name = f"{website_conf['name']}-{config.get('mongo_collection')}"
     store_to_mongo(transformed_data, collection_name=collection_name)
 
 def create_fetcher_dag(website_conf):
@@ -73,7 +73,7 @@ def create_fetcher_dag(website_conf):
         tags=["fetcher", website_conf["name"]],
     ) as dag:
 
-        queue_name = f"{website_conf['name']}_{config.get('rabbitmq_urls_queue', 'urls')}"
+        queue_name = f"{website_conf['name']}_{config.get('rabbitmq_urls_queue')}"
         
         sensor_task = RabbitMQSensor(
             task_id="sensor_task",
@@ -108,6 +108,6 @@ def create_fetcher_dag(website_conf):
     return dag
 
 # Register each website as its own DAG
-for website in config["websites"]:
+for website in yamlconfig["websites"]:
     dag_id = f"fetch_{website['name']}"
     globals()[dag_id] = create_fetcher_dag(website)
