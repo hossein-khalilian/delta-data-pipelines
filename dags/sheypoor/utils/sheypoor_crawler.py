@@ -6,11 +6,12 @@ import redis
 from urllib.parse import parse_qs, urlsplit
 from curl2json.parser import parse_curl
 from utils.config import config
+from utils.rabbitmq_utils import publish_messages
 
 def extract_transform_urls(**kwargs):
-    website_conf = kwargs["website_conf"]                   # from DAG Factory 
-    BLOOM_KEY = website_conf["redis_bloom_filter"]            # from YAML 
-    
+    # website_conf = kwargs["website_conf"]                   # from DAG Factory 
+    BLOOM_KEY = f"sheypoor_{config.get('redis_bloom_filter')}" 
+         
     print(f"Using Bloom Filter: {BLOOM_KEY}")
     print(config["redis_host"])
     print(config["redis_port"])
@@ -114,7 +115,7 @@ def extract_transform_urls(**kwargs):
                     full_ad = item.copy()
                     full_ad["content_url"] = url
                     new_ads_batch.append(full_ad)
-
+                    # new_urls_batch.append({"content_url": url})
 
                 total_found = len(items)
                 ratio = duplicate_count / total_found if total_found > 0 else 1
@@ -147,13 +148,6 @@ def extract_transform_urls(**kwargs):
                 print(f"Error on page {page}: {e}")
                 break
 
-    kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
+    # kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
     print(f"استخراج کامل شد — {len(all_urls)} آگهی جدید به XCom ارسال شد.")
-
-
-def produce_to_rabbitmq(**kwargs):
-    urls = kwargs["ti"].xcom_pull(key="extracted_urls", task_ids="extract_transform_task")
-    if not urls:
-        print("هیچ URL برای ارسال وجود ندارد.")
-        return
-    # asyncio.run(publish_tokens(urls))
+    return all_urls
