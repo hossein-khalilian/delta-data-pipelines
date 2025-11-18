@@ -12,7 +12,7 @@ from utils.rabbitmq_utils import publish_messages
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 
 with open(CONFIG_PATH, "r") as f:
-    yamlconfig = yaml.safe_load(f)
+    yaml_config = yaml.safe_load(f)
 
 def load_function_with_path(path: str):
     """Dynamically import a parser function from a string path."""
@@ -81,6 +81,6 @@ def create_crawler_dag(website_conf):
     return dag
 
 # Register each website as its own DAG
-for website in yamlconfig["websites"]:
+for website in yaml_config["websites"]:
     dag_id = f"crawl_{website['name']}"
     globals()[dag_id] = create_crawler_dag(website)

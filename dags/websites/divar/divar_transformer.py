@@ -1,6 +1,28 @@
 import re
 from datetime import datetime, timedelta
 
+def transformer_function(fetched_data):
+
+    if not fetched_data:
+        print("⚠️No data for transformation.")
+        return []
+
+    transformed_data = []
+    for item in fetched_data:
+        url = item["content_url"]
+        data = item["data"]
+        try:
+            transformed = transform_data(data)
+            transformed["content_url"] = url
+            transformed_data.append(transformed)
+        except Exception as e:
+            print(f"Error converting JSON for {url}: {e}")
+            continue
+        
+    print(f"✅ Transformed {len(transformed_data)} items.")
+
+    return transformed_data
+
 def persian_to_english_digits(s):
     """Convert Persian digits to English digits"""
     persian_digits = "۰۱۲۳۴۵۶۷۸۹"

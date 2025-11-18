@@ -30,7 +30,7 @@ def extract_transform_urls():
     # curl_command
     try:
         with open(
-            "./dags/divar/utils/curl_commands/curl_command_01.txt",
+            "./dags/websites/divar/curl_commands/curl_command_01.txt",
             "r",
             encoding="utf-8",
         ) as file:
@@ -119,7 +119,7 @@ def extract_transform_urls():
 
                 if ratio >= 0.3:
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
-                    # break
+
                     stop_condition = True
 
                 if not stop_condition:

@@ -1,15 +1,10 @@
 import asyncio
 import httpx
-from divar.utils.divar_transformer import transform_data
+from sheypoor.sheypoor_transformer import transform_data
 
-DIVAR_API_URL = "https://api.divar.ir/v8/posts-v2/web/{token}"
+# SHEYPOOR_API_URL = "https://www.sheypoor.com/api/v1.0/post/detail/{id}"  # اگر URL fetch متفاوت باشه، تنظیم کن
 
-# fetcher_function
 def fetcher_function(messages):
-    # fetched_messages = kwargs["ti"].xcom_pull(
-    #     key="return_value", task_ids="rabbitmq_sensor_task"
-    # )
-
     if not messages:
         print("No messages available from Sensor.")
         return []
@@ -33,16 +28,12 @@ def fetcher_function(messages):
 
     fetched_data = asyncio.run(fetch_all(messages))
     if fetched_data:
-    #     kwargs["ti"].xcom_push(key="fetched_data", value=fetched_data)
         print(f"✅ Processed {len(fetched_data)} items")
     else:
         print("No data fetched from API.")
     return fetched_data
 
 def transformer_function(fetched_data):
-    # fetched_data = kwargs["ti"].xcom_pull(
-    #     key="fetched_data", task_ids="fetch_task"
-    # )
     if not fetched_data:
         print("⚠️No data for transformation.")
         return []
@@ -60,7 +51,4 @@ def transformer_function(fetched_data):
             continue
         
     print(f"✅ Transformed {len(transformed_data)} items.")
-
     return transformed_data
-
-    # kwargs["ti"].xcom_push(key="transform_data", value=transformed_data)

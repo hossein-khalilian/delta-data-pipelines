@@ -6,10 +6,8 @@ import redis
 from urllib.parse import parse_qs, urlsplit
 from curl2json.parser import parse_curl
 from utils.config import config
-from utils.rabbitmq_utils import publish_messages
 
 def extract_transform_urls(**kwargs):
-    # website_conf = kwargs["website_conf"]                   # from DAG Factory 
     BLOOM_KEY = f"sheypoor_{config.get('redis_bloom_filter')}" 
          
     print(f"Using Bloom Filter: {BLOOM_KEY}")
@@ -29,7 +27,7 @@ def extract_transform_urls(**kwargs):
 
     # curl command
     try:
-        with open("./dags/sheypoor/utils/curl_commands/sheypoor_curl_command.txt", "r", encoding="utf-8") as file:
+        with open("./dags/websites/sheypoor/curl_commands/sheypoor_curl_command.txt", "r", encoding="utf-8") as file:
             curl_command = file.read()
         print("✅ File sheypoor_curl_command.txt was read successfully")
     except Exception as e:
@@ -50,12 +48,12 @@ def extract_transform_urls(**kwargs):
     # BASE URL
     BASE_URL = parsed_curl["url"].split("?")[0]
 
-    # پارامترهای اولیه (مثل f)
+    # Initial parameters
     original_params = {}
     if "?" in parsed_curl["url"]:
         query = urlsplit(parsed_curl["url"]).query
         original_params = parse_qs(query)
-        # تبدیل لیست به مقدار تک (مثل f)
+        # Convert lists to single values
         for k, v in original_params.items():
             original_params[k] = v[0] if isinstance(v, list) and len(v) == 1 else v
 

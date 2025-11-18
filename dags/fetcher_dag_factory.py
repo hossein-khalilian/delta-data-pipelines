@@ -6,14 +6,15 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from utils.config import config
 from utils.rabbitmq_utils import RabbitMQSensor
-from divar.utils.divar_fetcher import fetcher_function, transformer_function
+from websites.divar.divar_fetcher import fetcher_function
+from websites.divar.divar_transformer import transformer_function
 from utils.mongodb_utils import store_to_mongo
 from utils.config import config
 
 # Load YAML config
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 with open(CONFIG_PATH, "r") as f:
-    yamlconfig = yaml.safe_load(f)
+    yaml_config = yaml.safe_load(f)
 
 def load_function_with_path(path: str):
     module_path, func_name = path.rsplit(".", 1)
@@ -108,6 +109,6 @@ def create_fetcher_dag(website_conf):
     return dag
 
 # Register each website as its own DAG
-for website in yamlconfig["websites"]:
+for website in yaml_config["websites"]:
     dag_id = f"fetch_{website['name']}"
     globals()[dag_id] = create_fetcher_dag(website)
