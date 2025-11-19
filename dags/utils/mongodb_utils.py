@@ -3,9 +3,7 @@ from pymongo.errors import DuplicateKeyError
 from utils.config import config
 
 def store_to_mongo(transformed_data, collection_name=None):
-    # transformed_data = kwargs["ti"].xcom_pull(
-    #     key="transform_data", task_ids="transform_task"
-    # )
+
     if not transformed_data:
         print("No data available to store in MongoDB.")
         return 0
@@ -17,7 +15,6 @@ def store_to_mongo(transformed_data, collection_name=None):
     db = client[config["mongo_db"]]
     collection = db[collection_name]
 
-    
     saved_count = 0
     
     try:

@@ -7,7 +7,7 @@ import re
 # MongoDB connection details
 MONGO_URI = "mongodb://appuser:appassword@172.16.36.111:27017/delta-datasets"
 MONGO_DB = "delta-datasets"
-MONGO_COLLECTION = "shey.test3"
+MONGO_COLLECTION = "shey.test1"
 
 # Helper: Clean string to slug (e.g. "تهران" -> "tehran")
 def to_slug(text: str) -> str:
@@ -29,6 +29,7 @@ def extract_from_json(item: dict) -> dict:
     attributes = item.get("attributes", {})
     full_attrs = item.get("fullAttributes", [])
     geo = item.get("geo", {})
+
 
     # --- cat2_slug & cat3_slug ---
     categories = attributes.get("categories", [])

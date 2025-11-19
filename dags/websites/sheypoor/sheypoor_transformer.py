@@ -32,97 +32,215 @@ def parse_price(price_str: str) -> float:
     cleaned = re.sub(r'[^\d]', '', price_str)
     return float(cleaned) if cleaned else None
 
-def transform_data(raw_data: dict) -> dict:
+def transform_data(item: dict) -> dict:
 
-    item = raw_data.get("data", {}) if "data" in raw_data else raw_data  
-
-    doc = {
-        "created_at": datetime.now(),
-        "cat2_slug": None,
-        "cat3_slug": None,
-        "city_slug": None,
-        "neighborhood_slug": None,
-        "created_at_month": datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0),
-        "user_type": "شخصی",  
-        "description": item.get("description") or None,
-        "title": item.get("title") or None,
-        "content_url": None,
-    }
-
+    # item = raw_data.get("data", {}) if "data" in raw_data else raw_data  
+    
     attributes = item.get("attributes", {})
     full_attrs = item.get("fullAttributes", [])
     geo = item.get("geo", {})
 
-    # categories
-    categories = attributes.get("categories", [])
-    if len(categories) > 0:
-        doc["cat2_slug"] = to_slug(categories[0].get("name"))
-    if len(categories) > 1:
-        doc["cat3_slug"] = to_slug(categories[1].get("name"))
+    # -------------------------------
+    # Helpers
+    # -------------------------------
+    def get_attr(key):
+        for a in full_attrs:
+            if a.get("key") == key:
+                return a.get("value")
+        return None
 
+    def price_clean(v):
+        if not v:
+            return None
+        v = re.sub(r"[^\d]", "", str(v))
+        return float(v) if v else None
+
+    # -------------------------------
+    # breadcrumb
+    # -------------------------------
+    cats = attributes.get("categories", [])
+    if len(cats) > 0:
+        b1 = cats[0].get("name")
+    else:
+        b1 = None
+    if len(cats) > 1:
+        b2 = cats[1].get("name")
+    else:
+        b2 = None
+
+    bread_crumb = None
+    if b1:
+        bread_crumb = b1
+        if b2:
+            bread_crumb += "/" + b2
+
+    # -------------------------------
     # location
-    location_str = attributes.get("location")
-    if location_str:
-        parts = [p.strip() for p in location_str.replace("،", ",").split(",")]
-        doc["city_slug"] = to_slug(parts[0]) if len(parts) > 0 else None
-        doc["neighborhood_slug"] = to_slug(parts[1]) if len(parts) > 1 else None
+    # -------------------------------
+    loc = attributes.get("location")
+    if loc:
+        parts = [x.strip() for x in loc.split("،")]
+        city_slug = to_slug(parts[0]) if len(parts) > 0 else None
+        neighborhood_slug = to_slug(parts[1]) if len(parts) > 1 else None
+    else:
+        city_slug = None
+        neighborhood_slug = None
 
-    # map for fullAttributes
-    attr_map = {attr.get("key"): attr.get("value") for attr in full_attrs if attr.get("key")}
+    # -------------------------------
+    # Price fields
+    # -------------------------------
+    price_mode = None
+    price_value = None
+    rent_mode = None
+    rent_value = None
+    credit_mode = None
+    credit_value = None
 
-    # credit, rent , price
-    price_list = attributes.get("price", [])
-    if price_list:
-        first = price_list[0]
-        label = first.get("label", "").strip()
-        amount = parse_price(first.get("amount"))
+    pr_list = attributes.get("price", [])
+    if len(pr_list) > 0:
+        p = pr_list[0]
+        label = p.get("label", "").strip()
+        amount = price_clean(p.get("amount"))
+
         if label in ["رهن", "رهن کامل"]:
-            doc["credit_value"] = amount
-            doc["credit_mode"] = "مقطوع"
+            credit_value = amount
+            credit_mode = "مقطوع"
         elif label == "اجاره":
-            doc["rent_value"] = amount
-            doc["rent_mode"] = "مقطوع"
+            rent_value = amount
+            rent_mode = "مقطوع"
         else:
-            doc["price_value"] = amount
-            doc["price_mode"] = "مقطوع"
+            price_value = amount
+            price_mode = "مقطوع"
 
-    if "رهن" in attr_map:
-        doc["credit_value"] = parse_price(attr_map["رهن"])
-    if "اجاره" in attr_map:
-        doc["rent_value"] = parse_price(attr_map["اجاره"])
+    # -------------------------------
+    # building size
+    # -------------------------------
+    building_size = price_clean(get_attr("متراژ"))
 
-    # rent_type
-    rent = doc.get("rent_value")
-    credit = doc.get("credit_value")
-    if rent and credit and rent > 0 and credit > 0:
-        doc["rent_type"] = "rent_credit"
-    elif rent == 0 and credit and credit > 0:
-        doc["rent_type"] = "full_credit"
+    # -------------------------------
+    # deed
+    # -------------------------------
+    deed_type = get_attr("نوع سند")
 
-    doc["rent_credit_transform"] = attr_map.get("قابلیت تبدیل مبلغ رهن و اجاره") == "true"
+    # -------------------------------
+    # floor
+    # -------------------------------
+    f = get_attr("طبقه ملک")
+    floor = int(f) if f and f.isdigit() else None
 
-    # feature
-    doc["building_size"] = parse_price(attr_map.get("متراژ")) or parse_price(attr_map.get("مساحت"))
-    doc["land_size"] = parse_price(attr_map.get("زمین"))
-    doc["rooms_count"] = int(attr_map.get("تعداد اتاق")) if attr_map.get("تعداد اتاق", "").isdigit() else None
-    doc["floor"] = int(attr_map.get("طبقه")) if attr_map.get("طبقه", "").isdigit() else None
-    doc["construction_year"] = int(attr_map.get("سال ساخت بنا")) if attr_map.get("سال ساخت بنا", "").isdigit() else None
-    doc["has_elevator"] = attr_map.get("آسانسور") == "دارد"
-    doc["has_parking"] = attr_map.get("پارکینگ") == "دارد"
-    doc["has_warehouse"] = attr_map.get("انباری") == "دارد"
-    doc["has_balcony"] = attr_map.get("بالکن") == "دارد"
-    doc["property_type"] = attr_map.get("نوع ملک")
+    # -------------------------------
+    # rooms
+    # -------------------------------
+    r = get_attr("تعداد اتاق")
+    rooms_count = int(r) if r and r.isdigit() else None
 
-    # location
-    doc["location_latitude"] = str(geo.get("lat")) if geo.get("lat") else None
-    doc["location_longitude"] = str(geo.get("lon")) if geo.get("lon") else None
-    doc["location_radius"] = 500.0 if geo else None
+    # -------------------------------
+    # unit per floor
+    # -------------------------------
+    u = get_attr("تعداد واحد در طبقه")
+    unit_per_floor = int(u) if u and u.isdigit() else None
 
-    # images
-    images = []
-    for img in item.get("images", []):
-        if img.get("url"):
-            images.append(img["url"])
-    doc["images"] = images
+    # -------------------------------
+    # Facilities
+    # -------------------------------
+    has_elevator = True if get_attr("آسانسور") == "دارد" else None
+    has_warehouse = True if get_attr("انباری") == "دارد" else None
+    has_parking = True if get_attr("پارکینگ") == "دارد" else None
 
-    return doc
+    # -------------------------------
+    # Construction year
+    # -------------------------------
+    y = get_attr("سال ساخت بنا")
+    construction_year = int(y) if y and y.isdigit() else None
+
+    # -------------------------------
+    # price type logic
+    # -------------------------------
+    if credit_value and (not rent_value or rent_value == 0):
+        rent_type = "full_credit"
+    elif credit_value and rent_value:
+        rent_type = "rent_credit"
+    else:
+        rent_type = None
+
+    rent_credit_transform = True if get_attr("قابلیت تبدیل مبلغ رهن و اجاره") == "true" else None
+
+    # -------------------------------
+    # geo
+    # -------------------------------
+    location_latitude = geo.get("lat") if geo else None
+    location_longitude = geo.get("lon") if geo else None
+
+    # -------------------------------
+    # content_url
+    # -------------------------------
+    content_url = attributes.get("url")
+
+    # -------------------------------
+    # FINAL REQUIRED COLUMN ORDER
+    # -------------------------------
+    return {
+        "created_at": datetime.now(),
+        "cat2_slug": to_slug(b1) if b1 else None,
+        "cat3_slug": to_slug(b2) if b2 else None,
+        "city_slug": city_slug,
+        "neighborhood_slug": neighborhood_slug,
+        "created_at_month": datetime.now().strftime("%Y-%m-01 00:00:00"),
+        "user_type": None,
+        "description": item.get("description") or None,
+        "title": attributes.get("title") or None,
+        "rent_mode": rent_mode,
+        "rent_value": rent_value,
+        "rent_to_single": None,
+        "rent_type": rent_type,
+        "price_mode": price_mode,
+        "price_value": price_value,
+        "credit_mode": credit_mode,
+        "credit_value": credit_value,
+        "rent_credit_transform": rent_credit_transform,
+        "transformable_price": None,
+        "transformable_credit": None,
+        "transformed_credit": None,
+        "transformable_rent": None,
+        "transformed_rent": None,
+        "land_size": None,
+        "building_size": building_size,
+        "deed_type": deed_type,
+        "has_business_deed": True if deed_type == "تجاری" else None,
+        "floor": floor,
+        "rooms_count": rooms_count,
+        "total_floors_count": None,
+        "unit_per_floor": unit_per_floor,
+        "has_balcony": None,
+        "has_elevator": has_elevator,
+        "has_warehouse": has_warehouse,
+        "has_parking": has_parking,
+        "construction_year": construction_year,
+        "is_rebuilt": None,
+        "has_water": None,
+        "has_warm_water_provider": None,
+        "has_electricity": None,
+        "has_gas": None,
+        "has_heating_system": None,
+        "has_cooling_system": None,
+        "has_restroom": None,
+        "has_security_guard": None,
+        "has_barbecue": None,
+        "building_direction": None,
+        "has_pool": None,
+        "has_jacuzzi": None,
+        "has_sauna": None,
+        "floor_material": None,
+        "property_type": get_attr("نوع ملک") or None,
+        "regular_person_capacity": None,
+        "extra_person_capacity": None,
+        "cost_per_extra_person": None,
+        "rent_price_on_regular_days": None,
+        "rent_price_on_special_days": None,
+        "rent_price_at_weekends": None,
+        "location_latitude": location_latitude,
+        "location_longitude": location_longitude,
+        "location_radius": None,
+        "bread_crumb": bread_crumb,
+        "content_url": content_url,
+    }
