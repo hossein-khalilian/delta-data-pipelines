@@ -80,7 +80,7 @@ def create_fetcher_dag(website_conf):
             task_id="sensor_task",
             queue_name=queue_name,
             batch_size=website_conf.get("batch_size", 50),
-            timeout=600,
+            timeout=60,
         )
 
         fetch_task = PythonOperator(

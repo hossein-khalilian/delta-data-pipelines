@@ -1,5 +1,73 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
+
+def persian_to_english_digits(s):
+    """Convert Persian digits to English digits"""
+    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
+    english_digits = "0123456789"
+    return s.translate(str.maketrans(persian_digits, english_digits))
+
+def text_to_date(text):
+    text = text.strip()
+    text = persian_to_english_digits(text)
+    now = datetime.now()
+
+    if not re.search(r"\d+", text):
+        if "لحظاتی پیش" in text:
+            return now
+        if "ساعاتی پیش" in text:
+            return now - timedelta(hours=2)
+        if "دقایقی پیش" in text:
+            return now - timedelta(minutes=5)
+        #if not
+        return now
+
+    # if has number
+    match = re.search(r"(\d+)", text)
+    amount = int(match.group(1))
+
+    if "روز" in text:
+        return now - timedelta(days=amount)
+    elif "هفته" in text:
+        return now - timedelta(weeks=amount)
+    elif "ماه" in text:
+        return now - timedelta(days=amount * 30)
+
+    return now
+
+
+def extract_publish_time(data):
+    """Extract the ad posting time"""
+    publish_time = None
+
+    # TITLE
+    title_section = next(
+        (section for section in data.get("sections", []) if section.get("section_name") == "TITLE"),
+        None
+    )
+
+    if title_section:
+        # LEGEND_TITLE_ROW 
+        legend_widget = next(
+            (w for w in title_section.get("widgets", [])
+             if w.get("widget_type") == "LEGEND_TITLE_ROW"),
+            None
+        )
+
+        if legend_widget:
+            subtitle = legend_widget.get("data", {}).get("subtitle")
+            if subtitle:
+                # before the word 'در' 
+                time_part = subtitle.split(" در ")[0].strip()
+                try:
+                    dt = text_to_date(time_part)
+                    # publish_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    publish_time = dt
+                except Exception:
+                    publish_time = None
+
+    return publish_time
+
 
 def transformer_function(fetched_data):
     if not fetched_data:
@@ -40,9 +108,7 @@ def transform_data(item: dict) -> dict:
     full_attrs = item.get("fullAttributes", [])
     geo = item.get("geo", {})
 
-    # -------------------------------
     # Helpers
-    # -------------------------------
     def get_attr(key):
         for a in full_attrs:
             if a.get("key") == key:
@@ -55,9 +121,7 @@ def transform_data(item: dict) -> dict:
         v = re.sub(r"[^\d]", "", str(v))
         return float(v) if v else None
 
-    # -------------------------------
     # breadcrumb
-    # -------------------------------
     cats = attributes.get("categories", [])
     if len(cats) > 0:
         b1 = cats[0].get("name")
@@ -74,9 +138,7 @@ def transform_data(item: dict) -> dict:
         if b2:
             bread_crumb += "/" + b2
 
-    # -------------------------------
     # location
-    # -------------------------------
     loc = attributes.get("location")
     if loc:
         parts = [x.strip() for x in loc.split("،")]
@@ -86,9 +148,17 @@ def transform_data(item: dict) -> dict:
         city_slug = None
         neighborhood_slug = None
 
-    # -------------------------------
+    #creat_at_month
+    publish_time = None
+    if "timePassedLabel" in attributes:
+        try:
+            publish_time = text_to_date(attributes.get("timePassedLabel"))
+        except Exception:
+            publish_time = datetime.now()
+
+    created_at_month = publish_time if publish_time else datetime.now()
+    
     # Price fields
-    # -------------------------------
     price_mode = None
     price_value = None
     rent_mode = None
@@ -112,50 +182,34 @@ def transform_data(item: dict) -> dict:
             price_value = amount
             price_mode = "مقطوع"
 
-    # -------------------------------
     # building size
-    # -------------------------------
     building_size = price_clean(get_attr("متراژ"))
 
-    # -------------------------------
     # deed
-    # -------------------------------
     deed_type = get_attr("نوع سند")
 
-    # -------------------------------
     # floor
-    # -------------------------------
     f = get_attr("طبقه ملک")
     floor = int(f) if f and f.isdigit() else None
 
-    # -------------------------------
     # rooms
-    # -------------------------------
     r = get_attr("تعداد اتاق")
     rooms_count = int(r) if r and r.isdigit() else None
 
-    # -------------------------------
     # unit per floor
-    # -------------------------------
     u = get_attr("تعداد واحد در طبقه")
     unit_per_floor = int(u) if u and u.isdigit() else None
 
-    # -------------------------------
     # Facilities
-    # -------------------------------
     has_elevator = True if get_attr("آسانسور") == "دارد" else None
     has_warehouse = True if get_attr("انباری") == "دارد" else None
     has_parking = True if get_attr("پارکینگ") == "دارد" else None
 
-    # -------------------------------
     # Construction year
-    # -------------------------------
     y = get_attr("سال ساخت بنا")
     construction_year = int(y) if y and y.isdigit() else None
 
-    # -------------------------------
     # price type logic
-    # -------------------------------
     if credit_value and (not rent_value or rent_value == 0):
         rent_type = "full_credit"
     elif credit_value and rent_value:
@@ -165,27 +219,24 @@ def transform_data(item: dict) -> dict:
 
     rent_credit_transform = True if get_attr("قابلیت تبدیل مبلغ رهن و اجاره") == "true" else None
 
-    # -------------------------------
     # geo
-    # -------------------------------
     location_latitude = geo.get("lat") if geo else None
     location_longitude = geo.get("lon") if geo else None
 
-    # -------------------------------
+    #image
+    image = attributes.get("images", {}).get("thumbnails", {}).get("round")
+
     # content_url
-    # -------------------------------
     content_url = attributes.get("url")
 
-    # -------------------------------
     # FINAL REQUIRED COLUMN ORDER
-    # -------------------------------
     return {
         "created_at": datetime.now(),
         "cat2_slug": to_slug(b1) if b1 else None,
         "cat3_slug": to_slug(b2) if b2 else None,
         "city_slug": city_slug,
         "neighborhood_slug": neighborhood_slug,
-        "created_at_month": datetime.now().strftime("%Y-%m-01 00:00:00"),
+        "created_at_month": created_at_month,
         "user_type": None,
         "description": item.get("description") or None,
         "title": attributes.get("title") or None,
@@ -241,6 +292,7 @@ def transform_data(item: dict) -> dict:
         "location_latitude": location_latitude,
         "location_longitude": location_longitude,
         "location_radius": None,
+        "image": image,
         "bread_crumb": bread_crumb,
         "content_url": content_url,
     }

@@ -6,6 +6,12 @@ import redis
 from curl2json.parser import parse_curl
 from utils.config import config
 
+# Load cookies for the first request
+def load_cookies(path):
+    import json
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 # ETL for crawler DAG
 def extract_transform_urls():
     BLOOM_KEY = f"diver_{config.get('redis_bloom_filter')}"
@@ -43,9 +49,18 @@ def extract_transform_urls():
     parsed_curl = parse_curl(curl_command)
     parsed_curl.pop("cookies", None)
 
+    try:
+        cookies = load_cookies("./dags/websites/divar/curl_commands/first_request.txt")
+        print("✅ File first_request.txt was read successfully")
+        print(f"Loaded {len(cookies)} cookies")
+    except Exception as e:
+        print(f"❌ Error reading file first_request.txt: {e}")
+        return
+
     client_params = {
         "verify": True,
         "headers": parsed_curl.pop("headers", {}),
+        "cookies": cookies,
     }
 
     all_urls = []
@@ -53,14 +68,21 @@ def extract_transform_urls():
     stop_condition = False
 
     with httpx.Client(**client_params) as client:
+        print("=== Client Cookies ===")
+        print(client.cookies)
+
+        print("=== Client Headers ===")
+        print(client.headers)
+
         # GET for get Cookies
         try:
-            resp = client.get("https://divar.ir")
-            resp.raise_for_status()
+            # resp = client.get("https://divar.ir")
+            # resp.raise_for_status()
             print("✅ Cookies received")
         except Exception as e:
             print(f"❌ Error fetching cookies: {e}")
-            return
+            # return
+            raise RuntimeError("Task failed because cookies could not be fetched")
 
         curl_data = json.loads(parsed_curl.get("data"))
 
@@ -70,6 +92,14 @@ def extract_transform_urls():
                 curl_data["pagination_data"]["page"] = page
                 curl_data["pagination_data"]["layer_page"] = 0
                 parsed_curl["data"] = json.dumps(curl_data)
+                
+                # print("=== Request Sent Headers ===")
+                # for k, v in parsed_curl.get("headers", {}).items():
+                #     print(k, ":", v)
+
+                # print("=== Request Sent Cookies ===")
+                # print(client.cookies)
+
 
                 # POST request
                 response = client.request(
@@ -80,6 +110,13 @@ def extract_transform_urls():
                     params=parsed_curl.get("params"),
                 )
                 response.raise_for_status()
+                
+                # print("=== Response Headers ===")
+                # print(response.headers)
+
+                # print("=== Response Cookies ===")
+                # print(response.cookies)
+
                 result = response.json()
 
                 # Extract tokens
