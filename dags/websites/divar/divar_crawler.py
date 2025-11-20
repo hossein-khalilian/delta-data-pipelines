@@ -6,12 +6,6 @@ import redis
 from curl2json.parser import parse_curl
 from utils.config import config
 
-# Load cookies for the first request
-def load_cookies(path):
-    import json
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
 # ETL for crawler DAG
 def extract_transform_urls():
     BLOOM_KEY = f"diver_{config.get('redis_bloom_filter')}"
@@ -50,12 +44,15 @@ def extract_transform_urls():
     parsed_curl.pop("cookies", None)
 
     try:
-        cookies = load_cookies("./dags/websites/divar/curl_commands/first_request.txt")
-        print("✅ File first_request.txt was read successfully")
-        print(f"Loaded {len(cookies)} cookies")
+        with open("./dags/websites/divar/curl_commands/first_request.txt", "r", encoding="utf-8") as file:
+            first_request_curl = file.read()
+        print("✅ first_request_curl.txt loaded successfully")
     except Exception as e:
-        print(f"❌ Error reading file first_request.txt: {e}")
+        print(f"❌ Error reading first_request_curl.txt: {e}")
         return
+
+    parsed_first = parse_curl(first_request_curl)
+    cookies = parsed_first.pop("cookies", {})
 
     client_params = {
         "verify": True,

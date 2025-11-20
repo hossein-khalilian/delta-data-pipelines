@@ -1,13 +1,5 @@
-{
-    "_ga": "GA1.1.1845468145.1763619143",
-    "_ga_1G1K17N77F": "GS2.1.s1763619143$o1$g1$t1763619151$j52$l0$h0",
-    "_gcl_au": "1.1.660836026.1763619143",
-    "cdid": "49df5307-fbd2-42f1-ae2a-ff057d64fdbe",
-    "city": "tehran",
-    "csid": "",
-    "did": "68674b5b-f0f5-4213-a8da-5a367bb97597",
-    "disable_map_view": "true",
-    "ff": "{\"f\":{\"web_show_ios_appstore_promotion_banner\":true,\"foreigner_payment_enabled\":true,\"disable_recommendation\":true,\"enable_filter_post_count_web\":true,\"enable_non_lazy_image_post_card\":true,\"device_fp_enable\":true},\"e\":1763622741527,\"r\":1763705541527}",
-    "multi-city": "tehran|",
-    "theme": "dark"
-}
+curl 'https://example.com' \
+  -H 'User-Agent: Mozilla/5.0' \
+  -H 'Accept: */*' \
+  -H 'Content-Type: application/json' \
+  -b '_ga=GA1.1.1845468145.1763619143; _ga_1G1K17N77F=GS2.1.s1763619143$o1$g1$t1763619151$j52$l0$h0; _gcl_au=1.1.660836026.1763619143; cdid=49df5307-fbd2-42f1-ae2a-ff057d64fdbe; city=tehran; csid=; did=68674b5b-f0f5-4213-a8da-5a367bb97597; disable_map_view=true; ff={"f":{"web_show_ios_appstore_promotion_banner":true,"foreigner_payment_enabled":true,"disable_recommendation":true,"enable_filter_post_count_web":true,"enable_non_lazy_image_post_card":true,"device_fp_enable":true},"e":1763622741527,"r":1763705541527}; multi-city=tehran|; theme=dark'
