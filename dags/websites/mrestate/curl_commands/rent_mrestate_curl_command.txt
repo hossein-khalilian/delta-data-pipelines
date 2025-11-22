@@ -1,0 +1,12 @@
+curl 'https://mrestate.ir/_next/data/aRMoB8bhXCFS2CAkvXsyf/f/all/rent_residential_apartment.json?rl=2&search=all&search=rent_residential_apartment&page=1' \
+  -H 'accept: */*' \
+  -H 'accept-language: fa-IR,fa;q=0.9,en;q=0.8' \
+  -H 'referer: https://mrestate.ir/f/all/rent_residential_apartment?rl=2' \
+  -H 'sec-ch-ua: "Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' \
+  --compressed

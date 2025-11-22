@@ -15,3 +15,11 @@ websites:
     crawler: "websites.sheypoor.sheypoor_crawler.extract_transform_urls"
     fetcher: "websites.sheypoor.sheypoor_fetcher.fetcher_function"
     transformer: "websites.sheypoor.sheypoor_transformer.transformer_function"
+
+  - name: mrestate
+    url: "https://mrestate.ir/"
+    crawler_schedule: "*/5 * * * *"
+    fetcher_schedule: "*/2 * * * *"
+    crawler: "websites.mrestate.mrestate_crawler.extract_transform_urls"
+    # fetcher: "websites.sheypoor.sheypoor_fetcher.fetcher_function"
+    # transformer: "websites.sheypoor.sheypoor_transformer.transformer_function"
