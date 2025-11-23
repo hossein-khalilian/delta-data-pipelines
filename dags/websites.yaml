@@ -21,5 +21,5 @@ websites:
     crawler_schedule: "*/5 * * * *"
     fetcher_schedule: "*/2 * * * *"
     crawler: "websites.mrestate.mrestate_crawler.extract_transform_urls"
-    # fetcher: "websites.sheypoor.sheypoor_fetcher.fetcher_function"
-    # transformer: "websites.sheypoor.sheypoor_transformer.transformer_function"
+    fetcher: "websites.divar.divar_fetcher.fetcher_function"
+    transformer: "websites.mrestate.mrestate_transformer.transformer_function"
