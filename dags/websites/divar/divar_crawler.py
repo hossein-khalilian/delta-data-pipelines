@@ -65,8 +65,8 @@ def extract_transform_urls():
     stop_condition = False
 
     with httpx.Client(**client_params) as client:
-        print("=== Client Cookies ===")
-        print(client.cookies)
+        # print("=== Client Cookies ===")
+        # print(client.cookies)
 
         print("=== Client Headers ===")
         print(client.headers)

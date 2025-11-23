@@ -1,0 +1,17 @@
+curl 'https://mrestate.ir/_next/data/aRMoB8bhXCFS2CAkvXsyf/f/all/{{mode}}.json?rl=2&search=all&search={{mode}}' \
+  -H 'accept: */*' \
+  -H 'accept-encoding: gzip, deflate, br' \
+  -H 'accept-language: fa-IR,fa;q=0.9,en;q=0.8' \
+  -H 'cache-control: no-cache' \
+  -H 'pragma: no-cache' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://mrestate.ir/f/all/{{mode}}?rl=2' \
+  -H 'sec-ch-ua: "Google Chrome";v="131", "Chromium";v="131", "Not.A/Brand";v="99"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'sec-fetch-user: ?1' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' \
+  --compressed
