@@ -1,4 +1,4 @@
-curl 'https://mrestate.ir/_next/data/aRMoB8bhXCFS2CAkvXsyf/f/all/{{mode}}.json?rl=2&search=all&search={{mode}}' \
+curl 'https://mrestate.ir/_next/data/{{build_id}}/f/all/{{mode}}.json?rl=2&search=all&search={{mode}}' \
   -H 'accept: */*' \
   -H 'accept-encoding: gzip, deflate, br' \
   -H 'accept-language: fa-IR,fa;q=0.9,en;q=0.8' \

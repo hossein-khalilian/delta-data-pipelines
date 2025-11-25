@@ -50,7 +50,7 @@ def load_function(website_conf, **kwargs):
     store_to_mongo(transformed_data, collection_name=collection_name)
 
 def create_fetcher_dag(website_conf):
-    dag_id = f"fetch_{website_conf['name']}"
+    dag_id = f"{website_conf['name']}_fetcher"
     schedule = website_conf.get("fetcher_schedule", None)
 
     default_args = {
@@ -110,5 +110,5 @@ def create_fetcher_dag(website_conf):
 
 # Register each website as its own DAG
 for website in yaml_config["websites"]:
-    dag_id = f"fetch_{website['name']}"
+    dag_id = f"{website['name']}_fetcher"
     globals()[dag_id] = create_fetcher_dag(website)

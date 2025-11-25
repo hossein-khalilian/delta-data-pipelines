@@ -107,7 +107,7 @@ def extract_transform_urls(**kwargs):
                         continue
 
                     # Add to Bloom filter
-                    rdb.execute_command("BF.ADD", BLOOM_KEY, item_id)
+                    # rdb.execute_command("BF.ADD", BLOOM_KEY, item_id)
 
                     # Copy full ad + add content_url
                     full_ad = item.copy()

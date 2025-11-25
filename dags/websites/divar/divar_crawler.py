@@ -146,7 +146,7 @@ def extract_transform_urls():
                         duplicate_tokens.append(token)
                     else:
                         new_tokens.append(token)
-                        rdb.execute_command("BF.ADD", BLOOM_KEY, token)
+                        # rdb.execute_command("BF.ADD", BLOOM_KEY, token)
 
                 ratio = duplicate_count / len(tokens) if tokens else 1
                 print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")

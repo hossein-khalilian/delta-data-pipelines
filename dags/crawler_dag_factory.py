@@ -36,7 +36,7 @@ def load_function(website_conf, **kwargs):
     print(f"✅Sent {len(urls)} URLs to RabbitMQ queue: {queue_name}")
 
 def create_crawler_dag(website_conf):
-    dag_id = f"crawl_{website_conf['name']}"
+    dag_id = f"{website_conf['name']}_crawler"
     schedule = website_conf.get("crawler_schedule")
 
     default_args = {
@@ -82,5 +82,5 @@ def create_crawler_dag(website_conf):
 
 # Register each website as its own DAG
 for website in yaml_config["websites"]:
-    dag_id = f"crawl_{website['name']}"
+    dag_id = f"{website['name']}_crawler"
     globals()[dag_id] = create_crawler_dag(website)

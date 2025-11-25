@@ -33,8 +33,13 @@ def transform_data(data: dict) -> dict:
     doc = {}
     inner = data.get("pageProps", {}).get("data", {})
 
-    doc["cat2_slug"] = str(inner.get("category_layer_2")) if inner.get("category_layer_2") is not None else None
-    doc["cat3_slug"] = str(inner.get("category_layer_3")) if inner.get("category_layer_3") is not None else None
+    doc["cat2_slug"] = "املاک"
+    breadcrumb = data.get("pageProps", {}).get("data", {}).get("breadcrumb", [])
+    if len(breadcrumb) >= 2 and breadcrumb[1].get("url"):
+        doc["cat3_slug"] = breadcrumb[1]["url"].rstrip("/").split("/")[-1]
+    else:
+        doc["cat3_slug"] = None
+        
     doc["city_slug"] = inner.get("city")
     doc["neighborhood_slug"] = inner.get("neighbourhood")
     
@@ -47,12 +52,16 @@ def transform_data(data: dict) -> dict:
     else:
         doc["created_at_month"] = None
 
-    real_estate = inner.get("creator_properties", {}).get("real_estate")
-    doc["user_type"] = "مشاور املاک" if real_estate else "شخصی"
+    creator = inner.get("creator_properties", {})
+    if creator.get("consultant"):
+        doc["user_type"] = "مشاور املاک"
+    else:
+        doc["user_type"] = "شخصی"
+
 
     doc["description"] = inner.get("more_description") or data.get("pageProps", {}).get("description_tag")
     doc["title"] = inner.get("title") or data.get("pageProps", {}).get("title_tag")
-
+    
     doc["rent_mode"] = None
     doc["rent_value"] = inner.get("price_rent")
     doc["rent_to_single"] = None
@@ -75,7 +84,7 @@ def transform_data(data: dict) -> dict:
     doc["deed_type"] = None
     doc["has_business_deed"] = None
 
-    doc["floor"] = None
+    doc["floor"] = inner.get("more_details", {}).get("floor")
     doc["rooms_count"] = inner.get("num_bedrooms")
     doc["total_floors_count"] = None
     doc["unit_per_floor"] = None
@@ -104,7 +113,7 @@ def transform_data(data: dict) -> dict:
     doc["has_sauna"] = None
     doc["floor_material"] = None
 
-    doc["property_type"] = "آپارتمان" if str(inner.get("category_layer_3")) == "3001" else None
+    doc["property_type"] = None
 
     doc["regular_person_capacity"] = None
     doc["extra_person_capacity"] = None
@@ -117,7 +126,6 @@ def transform_data(data: dict) -> dict:
     doc["location_longitude"] = inner.get("longitude")
     doc["location_radius"] = None
 
-    # تصاویر
     images = []
     for img in inner.get("list_image", []):
         url = img.get("url")
@@ -127,7 +135,11 @@ def transform_data(data: dict) -> dict:
             images.append(url)
     doc["images"] = images if images else None
 
-    doc["bread_crumb"] = data.get("pageProps", {}).get("breadcrumb")
+    breadcrumb_list = data.get("pageProps", {}).get("data", {}).get("breadcrumb", [])
+    if breadcrumb_list:
+        doc["bread_crumb"] = "\n/\n".join([b.get("name") for b in breadcrumb_list if b.get("name")]) + "\n/"
+    else:
+        doc["bread_crumb"] = None
 
     doc["content_url"] = None #
 

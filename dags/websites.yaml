@@ -18,8 +18,8 @@ websites:
 
   - name: mrestate
     url: "https://mrestate.ir/"
-    crawler_schedule: "*/5 * * * *"
+    crawler_schedule: "*/10 * * * *"
     fetcher_schedule: "*/2 * * * *"
     crawler: "websites.mrestate.mrestate_crawler.extract_transform_urls"
-    fetcher: "websites.divar.divar_fetcher.fetcher_function"
+    fetcher: "websites.mrestate.mrestate_fetcher.fetcher_function"
     transformer: "websites.mrestate.mrestate_transformer.transformer_function"

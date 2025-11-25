@@ -4,7 +4,47 @@ import redis
 from curl2json.parser import parse_curl
 from urllib.parse import urlparse, urlencode, parse_qs 
 from utils.config import config
+import json
+from bs4 import BeautifulSoup 
 
+def extract_build_id(client):
+    curl_file = "extract_buildid.txt"
+    try:
+        with open(f"./dags/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8") as f:
+            curl_cmd = f.read()
+    except Exception as e:
+        print(f"Cannot read {curl_file}: {e}")
+        return None
+
+
+    parsed = parse_curl(curl_cmd)
+    url = parsed["url"]
+    headers = parsed.get("headers", {})
+    client.headers.update(headers)
+
+    try:
+        resp = client.get(url)
+        if resp.status_code != 200:
+            print(f"Failed to fetch main page: HTTP {resp.status_code}")
+            return None
+
+        html = resp.content.decode('utf-8') 
+        soup = BeautifulSoup(html, "html.parser")
+        next_data_script = soup.find("script", id="__NEXT_DATA__")
+
+        if next_data_script:
+            data = json.loads(next_data_script.string)
+            build_id = data.get("buildId")
+            if build_id:
+                print(f"Extracted Build ID: {build_id}")
+                return build_id
+            else:
+                print("Build ID not found in __NEXT_DATA__")
+        else:
+            print("__NEXT_DATA__ tag not found.")
+    except Exception as e:
+        print(f"Error extracting buildId: {e}")
+    return None
 
 def extract_transform_urls():
     BLOOM_BUY = f"mrestate_buy_{config.get('redis_bloom_filter', 'v1')}"
@@ -28,9 +68,14 @@ def extract_transform_urls():
     all_urls = []
     total_new = 0
 
-    with httpx.Client(timeout=30.0) as client:
+    with httpx.Client(timeout=30.0) as client: 
+        build_id = extract_build_id(client)
+        # if not build_id:
+        #     print("Using default buildId as fallback.")  
+        #     build_id = "aRMoB8bhXCFS2CAkvXsyf"  
+
         for mode_name, curl_file, bloom_key, mode_value in modes:
-            print(f"Starting MRESTATE.IR → {mode_name.upper()}")
+            print(f"Starting → {mode_name.upper()}")
 
             # curl
             try:
@@ -40,9 +85,8 @@ def extract_transform_urls():
                 print(f"Cannot read {curl_file}: {e}")
                 continue
 
-            # جایگزینی {{mode}} در curl
-            curl_cmd = curl_template.replace("{{mode}}", mode_value)
-            
+            curl_cmd = curl_template.replace("{{mode}}", mode_value).replace("{{build_id}}", build_id)           
+             
             parsed = parse_curl(curl_cmd)
             base_url_template = parsed["url"]
             headers = parsed.get("headers", {})
@@ -55,25 +99,14 @@ def extract_transform_urls():
             })
             page = 1
             stop = False
-            # consecutive_empty = 0
             new_count = 0
             dup_count = 0
 
             while page <= 10 and not stop:
-                # # pagination
-                # # current_url = base_url_template.split("page=1")[0] + f"page={page}"
-                # if page == 1:
-                #     current_url = base_url
-                # else:
-                #     separator = "&" if "?" in base_url else "?"
-                #     current_url = f"{base_url}{separator}page={page}"
 
-
-                # ساخت URL با pagination استاندارد و تمیز
                 parsed_url = urlparse(base_url_template)
-
                 query_params = parse_qs(parsed_url.query)
-                # query_params["page"] = [str(page)]  
+
                 if page == 1:
                     query_params.pop("page", None)
                 else:
@@ -101,7 +134,6 @@ def extract_transform_urls():
                         time.sleep(1.5)
                         continue
 
-                    # consecutive_empty = 0
                     page_new = 0
                     page_dup = 0
 
@@ -109,30 +141,26 @@ def extract_transform_urls():
                         u_id = item.get("u_id_file")
                         if not u_id:
                             continue
-                        
-                        # slug_key = u_id
-                        
+                                                
                         exists = rdb.execute_command("BF.EXISTS", bloom_key, u_id)
                         if exists:
                             page_dup += 1
                             dup_count += 1
-                        else:
-                            rdb.execute_command("BF.ADD", bloom_key, u_id)
-                            page_new += 1
-                            new_count += 1
+                            continue
 
-                            api_url = f"https://mrestate.ir/_next/data/aRMoB8bhXCFS2CAkvXsyf/s/{u_id}.json?post={u_id}"
-                            all_urls.append({"content_url": api_url})
+                        page_new += 1
+                        new_count += 1
+
+                        api_url = f"https://mrestate.ir/_next/data/{build_id}/s/{u_id}.json?post={u_id}"
+                        all_urls.append({"content_url": api_url})
 
                     ratio = page_dup / len(items) if items else 0
                     print(f"Page {page:3d} → {len(items):2d} ads | New: {page_new:4d} | Dup: {page_dup:3d} ({ratio:.1%})")
 
-                    # دقیقاً همون چیزی که گفتی: هر وقت داپلیکیت >= 30% شد → تموم
                     if ratio >= 0.30:
                         print(f"STOPPING CRAWL: {ratio:.1%} duplicate ads on page {page}")
                         stop = True
-                        break  # اختیاری: برای اطمینان بیشتر
-
+                        break 
                     page += 1
                     time.sleep(1.5)
                     
