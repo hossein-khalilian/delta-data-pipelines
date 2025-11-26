@@ -1,6 +1,5 @@
 import re
-from datetime import datetime
-
+from datetime import datetime, timezone
 
 def transformer_function(fetched_data):
     if not fetched_data:
@@ -22,80 +21,130 @@ def transformer_function(fetched_data):
     print(f"✅ Transformed {len(transformed_data)} items from mrestate.")
     return transformed_data
 
-
 def persian_to_english_digits(s: str) -> str:
     persian = "۰۱۲۳۴۵۶۷۸۹"
     english = "0123456789"
     return s.translate(str.maketrans(persian, english))
 
-
 def transform_data(data: dict) -> dict:
     doc = {}
-    inner = data.get("pageProps", {}).get("data", {})
+    more_details = data.get("pageProps", {}).get("data", {}).get("data", {}).get("more_details", {})
 
-    doc["cat2_slug"] = "املاک"
-    breadcrumb = data.get("pageProps", {}).get("data", {}).get("breadcrumb", [])
-    if len(breadcrumb) >= 2 and breadcrumb[1].get("url"):
-        doc["cat3_slug"] = breadcrumb[1]["url"].rstrip("/").split("/")[-1]
-    else:
-        doc["cat3_slug"] = None
-        
-    doc["city_slug"] = inner.get("city")
-    doc["neighborhood_slug"] = inner.get("neighbourhood")
+    doc["created_at"] = datetime.now()
     
-    date_publish = inner.get("date_publish")
-    if date_publish:
-        try:
-            doc["created_at_month"] = datetime.fromisoformat(date_publish.replace("Z", "+00:00"))
-        except:
-            doc["created_at_month"] = None
+    breadcrumb = data.get("pageProps", {}).get("data", {}).get("breadcrumb", [])
+    cat2_slug = None
+    cat3_slug = None
+    cat2_candidates = ["خرید", "اجاره"]
+    cat3_candidates = [
+        "آپارتمان", "برج", "پنت هاوس", "کلنگی", "مستغلات", "زمین",
+        "سوییت", "ویلا", "آپارتمان اداری", "سند اداری",
+        "مغازه", "کارخانه", "کارگاه", "انبار", "سوله"
+    ]
+
+    if len(breadcrumb) >= 2:
+        name = breadcrumb[1].get("name") or ""
+
+        first_word = name.split(" ")[0].strip()
+        if first_word in cat2_candidates:
+            cat2_slug = first_word
+            
+        name_without_cat2 = name.replace(first_word, "", 1).strip()
+
+        for item in cat3_candidates:
+            if name_without_cat2.startswith(item):
+                cat3_slug = item
+                break
+
+    doc["cat2_slug"] = cat2_slug
+    doc["cat3_slug"] = cat3_slug
+
+    doc["city_slug"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("city")
+    doc["neighborhood_slug"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("neighbourhood")
+    
+    date_str = data.get("pageProps", {}).get("data", {}).get("data", {}).get("date_publish")
+
+    if date_str:
+        if date_str.endswith("Z"):
+            date_str = date_str[:-1] + "+00:00"
+        dt = datetime.fromisoformat(date_str)
+        dt = dt.astimezone(timezone.utc) 
+        doc["created_at_month"] = dt     
     else:
         doc["created_at_month"] = None
+            
+    creator = data.get("pageProps", {}).get("data", {}).get("data", {}).get("creator_properties", {})
+    is_owner = data.get("pageProps", {}).get("data", {}).get("data", {}).get("is_owner", False)
 
-    creator = inner.get("creator_properties", {})
-    if creator.get("consultant"):
-        doc["user_type"] = "مشاور املاک"
-    else:
+    if is_owner:
         doc["user_type"] = "شخصی"
+    elif creator.get("real_estate") is not None:
+        doc["user_type"] = "مشاور املاک"
+    elif creator.get("consultant") is not None:
+        doc["user_type"] = "مشاور مستقل"
+    else:
+        doc["user_type"] = None
 
-
-    doc["description"] = inner.get("more_description") or data.get("pageProps", {}).get("description_tag")
-    doc["title"] = inner.get("title") or data.get("pageProps", {}).get("title_tag")
+    doc["description"] = (
+        data.get("pageProps", {}).get("data", {}).get("data", {}).get("more_description")
+    )
+    doc["title"] = (
+        data.get("pageProps", {}).get("data", {}).get("data", {}).get("title")
+    )    
     
+
     doc["rent_mode"] = None
-    doc["rent_value"] = inner.get("price_rent")
+    doc["rent_value"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("price_rent")
     doc["rent_to_single"] = None
-    doc["rent_type"] = None
+    
+    price_rent = data.get("pageProps", {}).get("data", {}).get("data", {}).get("price_rent")
+    price_sell = data.get("pageProps", {}).get("data", {}).get("data", {}).get("price_sell")
+    price_mortgage = data.get("pageProps", {}).get("data", {}).get("data", {}).get("price_mortgage")
 
-    doc["price_mode"] = "توافقی" if inner.get("agreed") else ("مقطوع" if inner.get("price_sell") else None)
-    doc["price_value"] = inner.get("price_sell")
 
+    if price_mortgage not in (None, 0) and (price_rent is None or price_rent == 0):
+        doc["rent_type"] = "full_credit"
+    elif price_mortgage not in (None, 0) and price_rent not in (None, 0):
+        doc["rent_type"] = "rent_credit"
+        
+    doc["price_mode"] = None
+    doc["price_value"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("price_sell")
     doc["credit_mode"] = None
-    doc["credit_value"] = inner.get("price_mortgage")
+    doc["credit_value"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("price_mortgage")
+    
+    if price_rent is None and price_sell is None and price_mortgage is None:
+        if doc.get("cat2_slug") == "اجاره":
+            doc["rent_mode"] = "توافقی"
+            doc["credit_mode"] = "توافقی"
+        elif doc.get("cat2_slug") == "خرید":
+            doc["price_mode"] = "توافقی"
+        
     doc["rent_credit_transform"] = None
     doc["transformable_price"] = None
     doc["transformable_credit"] = None
     doc["transformed_credit"] = None
     doc["transformable_rent"] = None
     doc["transformed_rent"] = None
+    
+    more_details = data.get("pageProps", {}).get("data", {}).get("data", {}).get("more_details", {})
 
     doc["land_size"] = None
-    doc["building_size"] = inner.get("area")
+    doc["building_size"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("area")
     doc["deed_type"] = None
     doc["has_business_deed"] = None
 
-    doc["floor"] = inner.get("more_details", {}).get("floor")
-    doc["rooms_count"] = inner.get("num_bedrooms")
+    doc["floor"] =  more_details.get("floor")
+    doc["rooms_count"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("num_bedrooms")
     doc["total_floors_count"] = None
     doc["unit_per_floor"] = None
 
-    more_details = inner.get("more_details", {})
-    doc["has_balcony"] = None
+    doc["has_balcony"] = more_details.get("balcony")
     doc["has_elevator"] = more_details.get("elevator")
     doc["has_warehouse"] = more_details.get("storeHouse")
-    doc["has_parking"] = bool(more_details.get("parking")) if more_details.get("parking") is not None else None
+    parking_value = more_details.get("parking")
+    doc["has_parking"] = (isinstance(parking_value, (int, float)) and parking_value > 0)
 
-    doc["construction_year"] = inner.get("year_constructed")
+    doc["construction_year"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("year_constructed")
     doc["is_rebuilt"] = None
 
     doc["has_water"] = None
@@ -105,12 +154,12 @@ def transform_data(data: dict) -> dict:
     doc["has_heating_system"] = None
     doc["has_cooling_system"] = None
     doc["has_restroom"] = None
-    doc["has_security_guard"] = more_details.get("janitor")
+    doc["has_security_guard"] = more_details.get("security")
     doc["has_barbecue"] = None
     doc["building_direction"] = None
-    doc["has_pool"] = None
-    doc["has_jacuzzi"] = None
-    doc["has_sauna"] = None
+    doc["has_pool"] = more_details.get("pool")
+    doc["has_jacuzzi"] = more_details.get("jacuzzi")
+    doc["has_sauna"] = more_details.get("sauna")
     doc["floor_material"] = None
 
     doc["property_type"] = None
@@ -122,18 +171,20 @@ def transform_data(data: dict) -> dict:
     doc["rent_price_on_special_days"] = None
     doc["rent_price_at_weekends"] = None
 
-    doc["location_latitude"] = inner.get("latitude")
-    doc["location_longitude"] = inner.get("longitude")
+    doc["location_latitude"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("latitude")
+    doc["location_longitude"] = data.get("pageProps", {}).get("data", {}).get("data", {}).get("longitude")
     doc["location_radius"] = None
 
     images = []
-    for img in inner.get("list_image", []):
+    for img in data.get("pageProps", {}).get("data", {}).get("data", {}).get("list_image", []):
         url = img.get("url")
-        if url and url.startswith("/media"):
-            url = "https://mrestate.ir" + url
         if url:
+            if url.startswith("/media"):
+                url = "https://mrestate.ir" + url
             images.append(url)
+
     doc["images"] = images if images else None
+
 
     breadcrumb_list = data.get("pageProps", {}).get("data", {}).get("breadcrumb", [])
     if breadcrumb_list:
@@ -141,7 +192,7 @@ def transform_data(data: dict) -> dict:
     else:
         doc["bread_crumb"] = None
 
-    doc["content_url"] = None #
+    doc["content_url"] = None 
 
     numeric_fields = [
         "rent_value", "price_value", "credit_value",

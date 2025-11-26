@@ -1,0 +1,14 @@
+  curl 'https://kilid.com/api/listing/portal/listing/v1/search/story?city=272905&listingType=BUY&sort=searchDate_desc&size=50&page=0' \
+  --compressed \
+  -H 'User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0' \
+  -H 'Accept: application/json, text/plain, */*' \
+  -H 'Accept-Language: en-US,en;q=0.5' \
+  -H 'Accept-Encoding: gzip, deflate, br, zstd' \
+  -H 'Referer: https://kilid.com/buy/tehran' \
+  -H 'Sec-GPC: 1' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  -H 'Connection: keep-alive' \
+  -H 'Cookie: session=eyJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uSWQiOiI1NmEzYTdjYi0wNWFlLTRjZjgtYjVlMS1iYjZlNzI1YzIyZjkiLCJleHBpcmVzQXQiOiIyMDI1LTEyLTI2VDE0OjA1OjMwLjQ1N1oiLCJpYXQiOjE3NjQxNjU5MzAsImV4cCI6MTc2NDc3MDczMH0.z2PQakxf6jpUD0lWK5krkJSQQ68IdsMK0mhA2u1xo7Y; _gcl_au=1.1.2145766264.1764158246; analytics_campaign={%22source%22:%22google%22%2C%22medium%22:%22organic%22}; analytics_token=bb5a5526-3d33-9b33-f666-293d9d45ab74; yektanet_session_last_activity=11/26/2025; _yngt_iframe=1; _yngt=01KB00D2V544SSFQARV8H0DSWM; _ga_Q38XYH2M2N=GS2.1.s1764165074$o2$g1$t1764166072$j60$l0$h511997987; _ga=GA1.1.656612004.1764158246; analytics_session_token=f3a7dd4c-1763-8845-810d-4e5d1ecab6ba' \
+  -H 'TE: trailers'

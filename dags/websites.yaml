@@ -23,3 +23,11 @@ websites:
     crawler: "websites.mrestate.mrestate_crawler.extract_transform_urls"
     fetcher: "websites.mrestate.mrestate_fetcher.fetcher_function"
     transformer: "websites.mrestate.mrestate_transformer.transformer_function"
+    
+  - name: kilid
+    url: "https://kilid.com/"
+    crawler_schedule: "*/5 * * * *"
+    #fetcher_schedule: "*/2 * * * *"
+    crawler: "websites.kilid.kilid_crawler.extract_transform_urls"
+    #fetcher: "websites.mrestate.mrestate_fetcher.fetcher_function"
+    #transformer: "websites.mrestate.mrestate_transformer.transformer_function"
