@@ -1,18 +1,20 @@
+import asyncio
 import importlib
 import os
 from datetime import datetime, timedelta
-import asyncio
 
 import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from utils.config import config
 from utils.rabbitmq_utils import publish_messages
+from utils.redis_utils import add_to_bloom_filter
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 
 with open(CONFIG_PATH, "r") as f:
     yaml_config = yaml.safe_load(f)
+
 
 def load_function_with_path(path: str):
     """Dynamically import a parser function from a string path."""
@@ -20,20 +22,30 @@ def load_function_with_path(path: str):
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
 
+
 def extract_transform_function(website_conf, **kwargs):
     func_path = website_conf["crawler"]
     crawler_func = load_function_with_path(func_path)
     all_urls = crawler_func()
     kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
 
+
 def load_function(website_conf, **kwargs):
     urls = kwargs["ti"].xcom_pull(
         key="extracted_urls", task_ids="extract_transform_task"
     )
-    queue_name = f"{website_conf['name']}_{config.get('rabbitmq_urls_queue')}"
-    asyncio.run(publish_messages(urls, queue_name=queue_name))
+    queue_name = f"{website_conf.get('name')}_{config.get('rabbitmq_urls_queue')}"
+    bloom_key = f"{website_conf.get('name')}_{config.get('redis_bloom_filter')}"
+
+    asyncio.run(publish_messages(queue_name, urls))
+
+    content_urls = [url.get("content_url") for url in urls]
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(add_to_bloom_filter(bloom_key, content_urls))
+    asyncio.run(add_to_bloom_filter(bloom_key, content_urls))
 
     print(f"✅Sent {len(urls)} URLs to RabbitMQ queue: {queue_name}")
+
 
 def create_crawler_dag(website_conf):
     dag_id = f"{website_conf['name']}_crawler"
@@ -79,6 +91,7 @@ def create_crawler_dag(website_conf):
         extract_transform_task >> load_task
 
     return dag
+
 
 # Register each website as its own DAG
 for website in yaml_config["websites"]:
