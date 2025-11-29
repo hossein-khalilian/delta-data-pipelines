@@ -2,12 +2,12 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-import redis
-from utils.config import config
 
+import redis
 from aio_pika import Message, connect_robust
 from airflow.sensors.base import BaseSensorOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
+
 from utils.config import config
 
 logger = logging.getLogger(__name__)
@@ -147,8 +147,7 @@ class RabbitMQSensor(BaseSensorOperator):
         return messages
 
 
-async def publish_messages(messages, queue_name: str = None):
-    queue_name = queue_name or config["rabbitmq_queue"]
+async def publish_messages(queue_name, messages):
 
     connection = await connect_robust(
         host=config["rabbitmq_host"],
@@ -160,16 +159,15 @@ async def publish_messages(messages, queue_name: str = None):
         channel = await connection.channel()
         queue = await channel.declare_queue(queue_name, durable=True)
 
-        rdb = redis.Redis(
-            host=config["redis_host"],
-            port=config["redis_port"]
-        )
-        BLOOM_KEY = f"diver_{config.get('redis_bloom_filter')}"
+        # rdb = redis.Redis(
+        #     host=config["redis_host"],
+        #     port=config["redis_port"]
+        # )
 
         for message in messages:
             token = message.get("content_url", "").split("/")[-1]
-            
-            rdb.execute_command("BF.ADD", BLOOM_KEY, token)
+
+            # rdb.execute_command("BF.ADD", BLOOM_KEY, token)
 
             await channel.default_exchange.publish(
                 Message(
