@@ -1,2 +1,16 @@
 curl 'https://kilid.com/' \
   --compressed \
+  -H 'User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0' \
+  -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
+  -H 'Accept-Language: en-US,en;q=0.5' \
+  -H 'Accept-Encoding: gzip, deflate, br, zstd' \
+  -H 'Referer: https://www.google.com/' \
+  -H 'Sec-GPC: 1' \
+  -H 'Upgrade-Insecure-Requests: 1' \
+  -H 'Sec-Fetch-Dest: document' \
+  -H 'Sec-Fetch-Mode: navigate' \
+  -H 'Sec-Fetch-Site: cross-site' \
+  -H 'Connection: keep-alive' \
+  -H 'Cookie: session=eyJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uSWQiOiJhYjkxNTRjZi01ODI1LTQ5OTAtYmUwMi1iYjFiMDNjOTZiOTAiLCJleHBpcmVzQXQiOiIyMDI1LTEyLTI3VDA5OjMzOjQ3LjYxOVoiLCJpYXQiOjE3NjQyMzYwMjcsImV4cCI6MTc2NDg0MDgyN30.RWRiMMG60XqEGYG7yzeJ5SIqojnC06ftivcHsoTJWFc' \
+  -H 'Priority: u=0, i' \
+  -H 'TE: trailers'

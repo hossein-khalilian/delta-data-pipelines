@@ -4,18 +4,31 @@ import httpx
 import redis
 from curl2json.parser import parse_curl
 from utils.config import config
-import xml.etree.ElementTree as ET  
+from xml.etree import ElementTree as ET
 
-# ETL for crawler DAG
+def xml_to_json_bytesafe(xml_bytes):
+    root = ET.fromstring(xml_bytes)
+
+    items = []
+    for elem in root.findall(".//result"):
+        id_elem = elem.find("id")
+        if id_elem is not None and id_elem.text:
+            items.append({"id": id_elem.text})
+
+    return {
+        "data": {
+            "result": {
+                "result": items
+            }
+        }
+    }
+
 def extract_transform_urls():
     BLOOM_KEY = f"kilid_{config.get('redis_bloom_filter')}"
 
     print(f"Using Bloom Filter: {BLOOM_KEY}")
-    print(config["redis_host"])
-    print(config["redis_port"])
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
-    # Bloom filter
     if not rdb.exists(BLOOM_KEY):
         try:
             rdb.execute_command(
@@ -27,22 +40,19 @@ def extract_transform_urls():
     else:
         print(f"✅ Bloom filter named {BLOOM_KEY} already exists")
 
-    # curl_command for search
+    # Load curl command
     try:
-        with open(
-            "./dags/websites/kilid/curl_commands/kilid_curl_command.txt",
-            "r",
-            encoding="utf-8",
-        ) as file:
+        with open("./dags/websites/kilid/curl_commands/kilid_curl_command.txt", "r", encoding="utf-8") as file:
             curl_command = file.read()
         print("✅ File kilid_curl_command.txt was read successfully")
     except Exception as e:
-        print(f"❌ Error reading file kilid_curl_command.txt: {e}")
+        print(f"❌ Error reading kilid_curl_command.txt: {e}")
         return
 
     parsed_curl = parse_curl(curl_command)
     parsed_curl.pop("cookies", None)
 
+    # Load first request for cookies
     try:
         with open("./dags/websites/kilid/curl_commands/first_request.txt", "r", encoding="utf-8") as file:
             first_request_curl = file.read().replace("\\", "")
@@ -65,64 +75,68 @@ def extract_transform_urls():
     stop_condition = False
 
     with httpx.Client(**client_params) as client:
-        print("=== Client Headers ===")
-        print(client.headers)
+        # print("=== Client Headers ===")
+        # print(client.headers)
 
-        # GET for cookies (already in cookies, but simulate if needed)
-        # try:
+        # Get initial cookies
         resp = client.get("https://kilid.com")
         resp.raise_for_status()
-            # print("✅ Cookies received/updated")
-        # except Exception as e:
-        #     print(f"❌ Error fetching cookies: {e}")
-        #     raise RuntimeError("Task failed because cookies could not be fetched")
 
-
-        # Base url and params from parsed_curl
-        base_url = parsed_curl["url"].split("?")[0]
-        query_string = parsed_curl["url"].split("?")[1] if "?" in parsed_curl["url"] else ""
+        full_url = parsed_curl["url"]
+        base_url = full_url.split("?")[0]
+        query_string = full_url.split("?")[1] if "?" in full_url else ""
         base_params = dict(p.split("=") for p in query_string.split("&")) if query_string else {}
         base_params["sort"] = "searchDate_desc"
 
         for page in range(max_pages):
             try:
-                # Update pagination
                 base_params["page"] = str(page)
-                parsed_curl["params"] = base_params
-                
+
                 response = client.request(
                     method=parsed_curl.get("method", "GET"),
-                    url=parsed_curl["url"],
-                    headers=parsed_curl.get("headers", {}),
-                    params=parsed_curl.get("params"),
+                    url=base_url,
+                    headers=client_params["headers"],
+                    params=base_params,
                 )
                 response.raise_for_status()
-                
-                response.encoding = 'utf-8'
-                
-                # Parse JSON (primary)
+
+                raw = response.content  
+
                 try:
-                    result = response.json()
-                    print(f"✅ Page {page}: JSON ({len(result.get('data', {}).get('result', {}).get('result', []))} ads)")
-                except json.JSONDecodeError:
-                    (f"⚠️ Page {page}: XML detected, parsing...")
-                    root = ET.fromstring(response.text)
-                    ids = [res.find('id').text for res in root.findall(".//result") if res.find('id') is not None]
-                    result = {'data': {'result': {'result': [{'id': iid} for iid in ids]}}}
-                    print(f"✅ Page {page}: XML parsed ({len(ids)} ids)")    
-                    
-                # Extract ids
-                widgets = result.get("data", {}).get("result", {}).get("result", []) or []
+                    result = json.loads(raw)
+                    # print(f"✅ Page {page}: JSON parsed")
+
+                    if isinstance(result, list):
+                        widgets = result
+                    elif isinstance(result, dict):
+                        widgets = result.get("data", {}).get("result", [])  
+                    else:
+                        widgets = []
+                        print(f"⚠️ Page {page}: Unexpected JSON structure")
+
+
+                except json.JSONDecodeError: 
+                    print(f"⚠️ Page {page}: XML detected (bytesafe parsing)...")
+                    try:
+                        result = xml_to_json_bytesafe(raw)
+                        count = len(result["data"]["result"]["result"])
+                        print(f"✅ Page {page}: XML converted → JSON ({count} ids)")
+                        widgets = result["data"]["result"]["result"]
+                    except ET.ParseError as parse_err:
+                        print(f"❌ XML Parse Error on page {page}: {parse_err}")
+                        continue  
+
                 ids = [w.get("id") for w in widgets if w.get("id")]
+
                 if not ids:
                     print(f"⛔️ Page {page}: No IDs found, stopping.")
                     break
 
-                print(f"Page: {page}")
-                print(f"📊 Number of ads: {len(widgets)}")
+                print(f"Page: {page} — {len(ids)} ads")
 
-                # Check for duplicates with Bloom
+                # Bloom filter duplicate detection
                 duplicate_count, new_ids, duplicate_ids = 0, [], []
+
                 for id_val in ids:
                     exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, id_val)
                     if exists:
@@ -131,18 +145,16 @@ def extract_transform_urls():
                     else:
                         new_ids.append(id_val)
 
-                ratio = duplicate_count / len(ids) if ids else 1
+                ratio = duplicate_count / len(ids) if len(ids) > 0 else 0
                 print(f"📊 {duplicate_count}/{len(ids)} duplicates ({ratio:.0%})")
 
                 if ratio >= 0.3:
-                    print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
+                    print(f"🛑 Page {page}: Too many duplicates — stopping.")
                     stop_condition = True
 
-                if not stop_condition:
-                    all_ids_to_push = new_ids + duplicate_ids
-                else:
-                    all_ids_to_push = new_ids
+                all_ids_to_push = new_ids if stop_condition else new_ids + duplicate_ids
 
+                # Create URLs
                 new_urls = [
                     {"content_url": f"https://kilid.com/detail/{id_val}"}
                     for id_val in all_ids_to_push
@@ -152,15 +164,11 @@ def extract_transform_urls():
                 if stop_condition:
                     break
 
-                # Optional: Update pagination from response if available
-                # Kilid doesn't have explicit next_page, so just increment
-
                 time.sleep(1.5)
 
             except Exception as e:
-                print(f"❌ Error requesting page {page}: {e}")
+                print(f"❌ Error on page {page}: {e}")
                 break
 
-    print(f"✅ Extraction completed — {len(all_urls)} new urls extracted")
-    
+    print(f"✅ Extraction completed — {len(all_urls)} URLs extracted")
     return list(all_urls)

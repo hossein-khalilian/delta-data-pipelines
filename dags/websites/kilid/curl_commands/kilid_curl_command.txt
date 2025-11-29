@@ -1,14 +1,17 @@
-  curl 'https://kilid.com/api/listing/portal/listing/v1/search/story?city=272905&listingType=BUY&sort=searchDate_desc&size=50&page=0' \
+  curl 'https://kilid.com/api/listing/portal/listing/v1/search?city=272905&listingType=BUY&sort=searchDate_desc&size=25&page=0' \
   --compressed \
-  -H 'User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0' \
-  -H 'Accept: application/json, text/plain, */*' \
-  -H 'Accept-Language: en-US,en;q=0.5' \
-  -H 'Accept-Encoding: gzip, deflate, br, zstd' \
-  -H 'Referer: https://kilid.com/buy/tehran' \
-  -H 'Sec-GPC: 1' \
-  -H 'Sec-Fetch-Dest: empty' \
-  -H 'Sec-Fetch-Mode: cors' \
-  -H 'Sec-Fetch-Site: same-origin' \
-  -H 'Connection: keep-alive' \
-  -H 'Cookie: session=eyJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uSWQiOiI1NmEzYTdjYi0wNWFlLTRjZjgtYjVlMS1iYjZlNzI1YzIyZjkiLCJleHBpcmVzQXQiOiIyMDI1LTEyLTI2VDE0OjA1OjMwLjQ1N1oiLCJpYXQiOjE3NjQxNjU5MzAsImV4cCI6MTc2NDc3MDczMH0.z2PQakxf6jpUD0lWK5krkJSQQ68IdsMK0mhA2u1xo7Y; _gcl_au=1.1.2145766264.1764158246; analytics_campaign={%22source%22:%22google%22%2C%22medium%22:%22organic%22}; analytics_token=bb5a5526-3d33-9b33-f666-293d9d45ab74; yektanet_session_last_activity=11/26/2025; _yngt_iframe=1; _yngt=01KB00D2V544SSFQARV8H0DSWM; _ga_Q38XYH2M2N=GS2.1.s1764165074$o2$g1$t1764166072$j60$l0$h511997987; _ga=GA1.1.656612004.1764158246; analytics_session_token=f3a7dd4c-1763-8845-810d-4e5d1ecab6ba' \
-  -H 'TE: trailers'
+  -H 'accept: application/json, text/plain, */*' \
+  -H 'accept-language: en-US,en;q=0.9' \
+  -H 'baggage: sentry-environment=master-server,sentry-release=6.9.0,sentry-public_key=0778f81ee7020bc2a35e09f409421b83,sentry-trace_id=7599e7962a58b4a054ee3616edf35726,sentry-transaction=GET%20%2Fbuy%2F%5B...location%5D,sentry-sampled=true,sentry-sample_rand=0.6445669066732458,sentry-sample_rate=1' \
+  -b '_gcl_au=1.1.1207328189.1764232446; analytics_campaign={%22source%22:%22google%22%2C%22medium%22:%22organic%22}; analytics_token=e558fbdc-77eb-e9e7-ea59-cc951d195cb2; analytics_session_token=9f6fc41c-4acb-20f6-30f8-5f70578078c7; yektanet_session_last_activity=11/27/2025; _yngt_iframe=1; _yngt=98905a72-2916-4abb-9805-35b6975a26fd; _ga=GA1.1.1526704677.1764232446; session=eyJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uSWQiOiIyM2M5MGQ3Mi1lMzkzLTQ1ZWQtOGM4Mi1lMzdkNDNmN2E3NWEiLCJleHBpcmVzQXQiOiIyMDI1LTEyLTI3VDA4OjQyOjE5LjQ5MVoiLCJpYXQiOjE3NjQyMzI5MzksImV4cCI6MTc2NDgzNzczOX0.Or9Ev4bONLevAUlUCyxmedpwrFifsIos6CgdZqCjR78; _ga_Q38XYH2M2N=GS2.1.s1764232446$o1$g1$t1764232939$j60$l0$h1603034204' \
+  -H 'device_id: 3f16e58a-f46d-4605-b26c-23a16573d72d' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://kilid.com/buy/tehran?page=1&size=25&sort=searchDate_desc' \
+  -H 'sec-ch-ua: "Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'sentry-trace: 7599e7962a58b4a054ee3616edf35726-9fb81ed127750a58-1' \
+  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36'
