@@ -8,7 +8,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from utils.config import config
 from utils.rabbitmq_utils import publish_messages
-from utils.redis_utils import add_to_bloom_filter
+from utils.redis_utils import add_to_bloom_filter, check_bloom
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 
@@ -42,6 +42,7 @@ def load_function(website_conf, **kwargs):
     content_urls = [url.get("content_url") for url in urls]
     # loop = asyncio.get_event_loop()
     # loop.run_until_complete(add_to_bloom_filter(bloom_key, content_urls))
+    asyncio.run(check_bloom(bloom_key, content_urls))
     asyncio.run(add_to_bloom_filter(bloom_key, content_urls))
 
     print(f"✅Sent {len(urls)} URLs to RabbitMQ queue: {queue_name}")

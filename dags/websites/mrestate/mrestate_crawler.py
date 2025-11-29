@@ -70,9 +70,6 @@ def extract_transform_urls():
 
     with httpx.Client(timeout=30.0) as client: 
         build_id = extract_build_id(client)
-        # if not build_id:
-        #     print("Using default buildId as fallback.")  
-        #     build_id = "aRMoB8bhXCFS2CAkvXsyf"  
 
         for mode_name, curl_file, bloom_key, mode_value in modes:
             print(f"Starting → {mode_name.upper()}")

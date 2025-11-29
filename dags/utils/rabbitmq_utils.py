@@ -172,7 +172,7 @@ async def publish_messages(queue_name, messages):
             await channel.default_exchange.publish(
                 Message(
                     body=json.dumps(message).encode(),
-                    delivery_mode=2,  # persistent
+                    delivery_mode=2,  
                 ),
                 routing_key=queue.name,
             )

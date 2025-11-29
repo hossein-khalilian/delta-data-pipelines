@@ -5,6 +5,7 @@ import httpx
 import redis
 from curl2json.parser import parse_curl
 from utils.config import config
+from utils.redis_utils import check_bloom  #  
 
 # ETL for crawler DAG
 def extract_transform_urls():
@@ -61,20 +62,16 @@ def extract_transform_urls():
     }
 
     all_urls = []
-    max_pages = 50
+    max_pages = 10
     stop_condition = False
 
     with httpx.Client(**client_params) as client:
-        # print("=== Client Cookies ===")
-        # print(client.cookies)
 
         print("=== Client Headers ===")
         print(client.headers)
 
         # GET for get Cookies
         try:
-            # resp = client.get("https://divar.ir")
-            # resp.raise_for_status()
             print("✅ Cookies received")
         except Exception as e:
             print(f"❌ Error fetching cookies: {e}")
@@ -85,7 +82,7 @@ def extract_transform_urls():
 
         for page in range(max_pages):
             try:
-                # udate pagination_data
+                # update pagination_data
                 curl_data["pagination_data"]["page"] = page
                 curl_data["pagination_data"]["layer_page"] = 0
                 parsed_curl["data"] = json.dumps(curl_data)
@@ -93,10 +90,6 @@ def extract_transform_urls():
                 # print("=== Request Sent Headers ===")
                 # for k, v in parsed_curl.get("headers", {}).items():
                 #     print(k, ":", v)
-
-                # print("=== Request Sent Cookies ===")
-                # print(client.cookies)
-
 
                 # POST request
                 response = client.request(
@@ -110,9 +103,6 @@ def extract_transform_urls():
                 
                 # print("=== Response Headers ===")
                 # print(response.headers)
-
-                # print("=== Response Cookies ===")
-                # print(response.cookies)
 
                 result = response.json()
 
