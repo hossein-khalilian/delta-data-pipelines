@@ -62,7 +62,7 @@ def extract_transform_urls():
     }
 
     all_urls = []
-    max_pages = 10
+    max_pages = 50
     stop_condition = False
 
     with httpx.Client(**client_params) as client:
