@@ -10,8 +10,8 @@ websites:
 
   - name: sheypoor
     url: "https://www.sheypoor.com/"
-    crawler_schedule: "*/10 * * * *"
-    fetcher_schedule: "*/5 * * * *"
+    crawler_schedule: "*/15 * * * *"
+    fetcher_schedule: "*/10 * * * *"
     crawler: "websites.sheypoor.sheypoor_crawler.extract_transform_urls"
     fetcher: "websites.sheypoor.sheypoor_fetcher.fetcher_function"
     transformer: "websites.sheypoor.sheypoor_transformer.transformer_function"

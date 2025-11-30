@@ -48,6 +48,8 @@ def extract_build_id(client):
 def extract_transform_urls(website_conf=None):
     # bloom_key = f"{website_conf.get('name')}_{config.get('redis_bloom_filter')}"
     BLOOM_KEY = f"mrestate_{config.get('redis_bloom_filter')}"
+    print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
+
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     if not rdb.exists(BLOOM_KEY):
@@ -69,16 +71,29 @@ def extract_transform_urls(website_conf=None):
         build_id = extract_build_id(client)
 
         for mode_name, curl_file, mode_value in modes:
-            print(f"✅Starting → {mode_name.upper()}")
+            print(f"⚪Starting → {mode_name.upper()}")
 
-            # curl
+            # # curl
+            # try:
+            #     with open(f"./dags/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8") as f:
+            #         curl_template = f.read()
+            # except Exception as e:
+            #     print(f"Cannot read {curl_file}: {e}")
+            #     continue
+
+            # curl_command
             try:
-                with open(f"./dags/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8") as f:
-                    curl_template = f.read()
+                with open(
+                    f"./dags/websites/mrestate/curl_commands/{curl_file}",
+                    "r",
+                    encoding="utf-8",
+                ) as file:
+                    curl_template = file.read()
+                print("✅ File curl_command_01.txt was read successfully")
             except Exception as e:
-                print(f"Cannot read {curl_file}: {e}")
-                continue
-
+                print(f"❌ Error reading file curl_command_01.txt: {e}")
+                return
+    
             curl_cmd = curl_template.replace("{{mode}}", mode_value).replace("{{build_id}}", build_id)           
              
             parsed = parse_curl(curl_cmd)
@@ -148,13 +163,16 @@ def extract_transform_urls(website_conf=None):
                         new_count += 1
 
                         all_urls.append({"content_url": api_url})
-                        rdb.execute_command("BF.ADD", BLOOM_KEY, api_url)
+                        # rdb.execute_command("BF.ADD", BLOOM_KEY, api_url)
 
                     ratio = page_dup / len(items) if items else 0
-                    print(f"Page {page:3d} → {len(items):2d} ads | New: {page_new:4d} | Dup: {page_dup:3d} ({ratio:.1%})")
+                    # print(f"Page {page:3d} → {len(items):2d} ads | New: {page_new:4d} | Dup: {page_dup:3d} ({ratio:.1%})")
+                    print(f"Page: {page}")
+                    print(f"📊 Number of ads: {len(items)}")
+                    print(f"📊 {page_dup}/{len(items)} duplicates ({ratio:.0%})")
 
                     if ratio >= 0.30:
-                        print(f"STOPPING CRAWL: {ratio:.1%} duplicate ads on page {page}")
+                        print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
                         stop = True
                         break 
                     page += 1
@@ -164,8 +182,8 @@ def extract_transform_urls(website_conf=None):
                     print(f"Error on page {page}: {e}")
                     break
 
-            print(f"{mode_name.upper()} finished → {new_count} new ads collected")
+            print(f"{mode_name.upper()} finished → {new_count} new urls extracted")
             total_new += new_count
 
-    print(f"\nTOTAL CRAWL COMPLETED: {total_new} new unique ads (buy + rent)")
+    print(f"✅ Extraction completed — {total_new} new urls extracted(buy + rent)")
     return all_urls

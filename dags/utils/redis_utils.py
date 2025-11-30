@@ -6,6 +6,9 @@ async def add_to_bloom_filter(bloom_key, items):
     redis_host = config.get("redis_host")
     redis_port = config.get("redis_port")
     r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+    if not items:
+        print(f"No items to add to {bloom_key}")
+        return []
 
     result = await r.execute_command("BF.MADD", bloom_key, *items)
     print(f"✅ BF.MADD result for {bloom_key}: {result}")
@@ -28,7 +31,6 @@ async def check_bloom(bloom_key, items):
     
     await r.close()
     
-       
     total = len(items)
     duplicate_count = len(duplicate_items)
     new_count = len(new_items)
@@ -40,6 +42,5 @@ async def check_bloom(bloom_key, items):
     print(f"New count: {new_count}")
     print(f"Duplicate count: {duplicate_count}")
     print(f"Duplicate percentage: {duplicate_percent:.2f}%")
-    
     
     return new_items, duplicate_items

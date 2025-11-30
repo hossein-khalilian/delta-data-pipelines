@@ -5,15 +5,14 @@ import httpx
 import redis
 from curl2json.parser import parse_curl
 from utils.config import config
-from utils.redis_utils import check_bloom  #  
 
 # ETL for crawler DAG
 def extract_transform_urls():
     BLOOM_KEY = f"divar_{config.get('redis_bloom_filter')}"
 
-    print(f"Using Bloom Filter: {BLOOM_KEY}")
-    print(config["redis_host"])
-    print(config["redis_port"])
+    print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
+    # print(config["redis_host"])
+    # print(config["redis_port"])
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     # Bloom filter
@@ -25,8 +24,8 @@ def extract_transform_urls():
             print(f"✅ Bloom filter named {BLOOM_KEY} has been created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
-    else:
-        print(f"✅ Bloom filter named {BLOOM_KEY} already exists")
+    # else:
+    #     print(f"✅ Bloom filter named {BLOOM_KEY} already exists")
 
     # curl_command
     try:
@@ -67,8 +66,8 @@ def extract_transform_urls():
 
     with httpx.Client(**client_params) as client:
 
-        print("=== Client Headers ===")
-        print(client.headers)
+        # print("=== Client Headers ===")
+        # print(client.headers)
 
         # GET for get Cookies
         try:

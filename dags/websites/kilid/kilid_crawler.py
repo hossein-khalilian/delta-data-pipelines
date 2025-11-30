@@ -25,8 +25,7 @@ def xml_to_json_bytesafe(xml_bytes):
 
 def extract_transform_urls():
     BLOOM_KEY = f"kilid_{config.get('redis_bloom_filter')}"
-
-    print(f"Using Bloom Filter: {BLOOM_KEY}")
+    print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     if not rdb.exists(BLOOM_KEY):
@@ -37,8 +36,8 @@ def extract_transform_urls():
             print(f"✅ Bloom filter named {BLOOM_KEY} has been created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
-    else:
-        print(f"✅ Bloom filter named {BLOOM_KEY} already exists")
+    # else:
+    #     print(f"✅ Bloom filter named {BLOOM_KEY} already exists")
 
     # Load curl command
     try:
@@ -132,8 +131,8 @@ def extract_transform_urls():
                     print(f"⛔️ Page {page}: No IDs found, stopping.")
                     break
 
-                print(f"Page: {page} — {len(ids)} ads")
-
+                print(f"Page: {page}")
+                print(f"📊 Number of ads: {len(ids)}")
                 # Bloom filter duplicate detection
                 duplicate_count, new_ids, duplicate_ids = 0, [], []
 
@@ -146,14 +145,13 @@ def extract_transform_urls():
                         duplicate_ids.append(url)
                     else:
                         new_ids.append(url)
-                        rdb.execute_command("BF.ADD", BLOOM_KEY, url)
-
+                        # rdb.execute_command("BF.ADD", BLOOM_KEY, url)
 
                 ratio = duplicate_count / len(ids) if len(ids) > 0 else 0
                 print(f"📊 {duplicate_count}/{len(ids)} duplicates ({ratio:.0%})")
 
                 if ratio >= 0.3:
-                    print(f"🛑 Page {page}: Too many duplicates — stopping.")
+                    print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
                     stop_condition = True
 
                 all_ids_to_push = new_ids if stop_condition else new_ids + duplicate_ids

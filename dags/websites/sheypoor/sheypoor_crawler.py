@@ -9,21 +9,18 @@ from utils.config import config
 
 def extract_transform_urls(**kwargs):
     BLOOM_KEY = f"sheypoor_{config.get('redis_bloom_filter')}" 
-         
-    print(f"Using Bloom Filter: {BLOOM_KEY}")
-    print(config["redis_host"])
-    print(config["redis_port"])
+    print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
+    # print(config["redis_host"])
+    # print(config["redis_port"])
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     # Bloom filter
     if not rdb.exists(BLOOM_KEY):
         try:
             rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2)
-            print(f"Bloom filter named {BLOOM_KEY} has been created")
+            print(f"✅Bloom filter named {BLOOM_KEY} has been created")
         except Exception as e:
-            print(f"Error creating Bloom filter: {e}")
-    else:
-        print(f"Bloom filter {BLOOM_KEY} already exists")
+            print(f"⚠️ Error while creating Bloom filter: {e}")
 
     # curl command
     try:
@@ -61,7 +58,7 @@ def extract_transform_urls(**kwargs):
         original_params.pop("f")
 
     all_urls = []
-    max_pages = 10
+    max_pages = 20
     stop_condition = False
 
     with httpx.Client(**client_params) as client:
@@ -114,7 +111,10 @@ def extract_transform_urls(**kwargs):
 
                 total_found = len(items)
                 ratio = duplicate_count / total_found if total_found > 0 else 1
-                print(f"Page {page}: {total_found} ads → {len(new_ads_batch)} new, {duplicate_count} duplicates ({ratio:.0%})")
+                
+                print(f"Page: {page}")
+                print(f"📊 Number of ads: {len(new_ads_batch)}")
+                print(f"📊 {duplicate_count}/{len(new_ads_batch)} duplicates ({ratio:.0%})")
 
                 if ratio >= 0.3:
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
@@ -126,7 +126,6 @@ def extract_transform_urls(**kwargs):
                     ads_to_push = new_ads_batch
                     
                 all_urls.extend(ads_to_push)
-                print(f"Page {page}: {len(ads_to_push)} ads added to output")
 
                 # update f for next page
                 new_f = result.get("meta", {}).get("f")
@@ -137,11 +136,11 @@ def extract_transform_urls(**kwargs):
                 if stop_condition:
                     break
 
-                time.sleep(1.5)
+                time.sleep(3)
 
             except Exception as e:
                 print(f"Error on page {page}: {e}")
                 break
 
-    print(f"Extraction complete — {len(all_urls)} new items were sent to XCom.")
+    print(f"✅ Extraction completed — {len(all_urls)} new urls extracted")
     return all_urls
