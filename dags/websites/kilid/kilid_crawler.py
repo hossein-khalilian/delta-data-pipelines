@@ -138,12 +138,16 @@ def extract_transform_urls():
                 duplicate_count, new_ids, duplicate_ids = 0, [], []
 
                 for id_val in ids:
-                    exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, id_val)
+                    url = f"https://kilid.com/detail/{id_val}"
+
+                    exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, url)
                     if exists:
                         duplicate_count += 1
-                        duplicate_ids.append(id_val)
+                        duplicate_ids.append(url)
                     else:
-                        new_ids.append(id_val)
+                        new_ids.append(url)
+                        rdb.execute_command("BF.ADD", BLOOM_KEY, url)
+
 
                 ratio = duplicate_count / len(ids) if len(ids) > 0 else 0
                 print(f"📊 {duplicate_count}/{len(ids)} duplicates ({ratio:.0%})")
@@ -154,11 +158,7 @@ def extract_transform_urls():
 
                 all_ids_to_push = new_ids if stop_condition else new_ids + duplicate_ids
 
-                # Create URLs
-                new_urls = [
-                    {"content_url": f"https://kilid.com/detail/{id_val}"}
-                    for id_val in all_ids_to_push
-                ]
+                new_urls = [{"content_url": url} for url in all_ids_to_push]
                 all_urls.extend(new_urls)
 
                 if stop_condition:

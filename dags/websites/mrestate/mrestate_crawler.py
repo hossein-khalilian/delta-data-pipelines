@@ -16,7 +16,6 @@ def extract_build_id(client):
         print(f"Cannot read {curl_file}: {e}")
         return None
 
-
     parsed = parse_curl(curl_cmd)
     url = parsed["url"]
     headers = parsed.get("headers", {})
@@ -46,23 +45,21 @@ def extract_build_id(client):
         print(f"Error extracting buildId: {e}")
     return None
 
-def extract_transform_urls():
-    BLOOM_BUY = f"mrestate_buy_{config.get('redis_bloom_filter', 'v1')}"
-    BLOOM_RENT = f"mrestate_rent_{config.get('redis_bloom_filter', 'v1')}"
-
+def extract_transform_urls(website_conf=None):
+    # bloom_key = f"{website_conf.get('name')}_{config.get('redis_bloom_filter')}"
+    BLOOM_KEY = f"mrestate_{config.get('redis_bloom_filter')}"
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
-    for key in [BLOOM_BUY, BLOOM_RENT]:
-        if not rdb.exists(key):
-            try:
-                rdb.execute_command("BF.RESERVE", key, 0.01, 1_000_000, "EXPANSION", 2)
-                print(f"Bloom filter created: {key}")
-            except:
-                pass
+    if not rdb.exists(BLOOM_KEY):
+        try:
+            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.01, 1_000_000, "EXPANSION", 2)
+            print(f"Bloom filter created: {BLOOM_KEY}")
+        except Exception as e:
+            print(f"Bloom init error: {e}")
 
     modes = [
-        ("buy", "mrestate_curl_command.txt", BLOOM_BUY, "buy_residential_apartment"),
-        ("rent", "mrestate_curl_command.txt", BLOOM_RENT, "rent_residential_apartment"),
+        ("buy", "mrestate_curl_command.txt", "buy_residential_apartment"),
+        ("rent", "mrestate_curl_command.txt", "rent_residential_apartment"),
     ]
 
     all_urls = []
@@ -71,8 +68,8 @@ def extract_transform_urls():
     with httpx.Client(timeout=30.0) as client: 
         build_id = extract_build_id(client)
 
-        for mode_name, curl_file, bloom_key, mode_value in modes:
-            print(f"Starting → {mode_name.upper()}")
+        for mode_name, curl_file, mode_value in modes:
+            print(f"✅Starting → {mode_name.upper()}")
 
             # curl
             try:
@@ -126,7 +123,7 @@ def extract_transform_urls():
                     items = inner_data.get("courses", [])
 
                     if not items:
-                        print(f"Page {page} → empty, but continuing (no early stop on empty)")
+                        print(f"Page {page} → empty, continue")
                         page += 1
                         time.sleep(1.5)
                         continue
@@ -139,7 +136,9 @@ def extract_transform_urls():
                         if not u_id:
                             continue
                                                 
-                        exists = rdb.execute_command("BF.EXISTS", bloom_key, u_id)
+                        api_url = f"https://mrestate.ir/_next/data/{build_id}/s/{u_id}.json?post={u_id}"
+                        exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, api_url)
+                        
                         if exists:
                             page_dup += 1
                             dup_count += 1
@@ -148,8 +147,8 @@ def extract_transform_urls():
                         page_new += 1
                         new_count += 1
 
-                        api_url = f"https://mrestate.ir/_next/data/{build_id}/s/{u_id}.json?post={u_id}"
                         all_urls.append({"content_url": api_url})
+                        rdb.execute_command("BF.ADD", BLOOM_KEY, api_url)
 
                     ratio = page_dup / len(items) if items else 0
                     print(f"Page {page:3d} → {len(items):2d} ads | New: {page_new:4d} | Dup: {page_dup:3d} ({ratio:.1%})")
@@ -163,7 +162,6 @@ def extract_transform_urls():
                     
                 except Exception as e:
                     print(f"Error on page {page}: {e}")
-                    time.sleep(1.5)
                     break
 
             print(f"{mode_name.upper()} finished → {new_count} new ads collected")

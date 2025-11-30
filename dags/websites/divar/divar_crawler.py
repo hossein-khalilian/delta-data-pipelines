@@ -9,7 +9,7 @@ from utils.redis_utils import check_bloom  #
 
 # ETL for crawler DAG
 def extract_transform_urls():
-    BLOOM_KEY = f"diver_{config.get('redis_bloom_filter')}"
+    BLOOM_KEY = f"divar_{config.get('redis_bloom_filter')}"
 
     print(f"Using Bloom Filter: {BLOOM_KEY}")
     print(config["redis_host"])
@@ -130,20 +130,23 @@ def extract_transform_urls():
                 # Check for duplicate tokens
                 duplicate_count, new_tokens, duplicate_tokens = 0, [], []
                 for token in tokens:
-                    exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, token)
+                    content_url = f"https://api.divar.ir/v8/posts-v2/web/{token}"
+
+                    exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, content_url)
                     if exists:
                         duplicate_count += 1
-                        duplicate_tokens.append(token)
+                        duplicate_tokens.append(content_url)
                     else:
-                        new_tokens.append(token)
-                        # rdb.execute_command("BF.ADD", BLOOM_KEY, token)
+                        new_tokens.append(content_url)
+
+                # ratio = duplicate_count / len(tokens) if tokens else 1
+                # print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
                 ratio = duplicate_count / len(tokens) if tokens else 1
                 print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
                 if ratio >= 0.3:
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
-
                     stop_condition = True
 
                 if not stop_condition:
@@ -151,10 +154,7 @@ def extract_transform_urls():
                 else:
                     all_urls_to_push = new_tokens
 
-                new_urls = [
-                    {"content_url": f"https://api.divar.ir/v8/posts-v2/web/{t}"}
-                    for t in all_urls_to_push
-                ]
+                new_urls = [{"content_url": url} for url in all_urls_to_push]
                 all_urls.extend(new_urls)
 
                 if stop_condition:

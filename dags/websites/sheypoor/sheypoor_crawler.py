@@ -72,7 +72,7 @@ def extract_transform_urls(**kwargs):
                 # Set current page
                 current_params["p"] = str(page)
 
-                print(f"Requesting page {page} with parameters: {current_params}")
+                # print(f"Requesting page {page} with parameters: {current_params}")
 
                 response = client.get(BASE_URL, params=current_params)
                 response.raise_for_status()
@@ -101,13 +101,10 @@ def extract_transform_urls(**kwargs):
                         continue
 
                     # Check for duplicates
-                    if rdb.execute_command("BF.EXISTS", BLOOM_KEY, item_id):
+                    if rdb.execute_command("BF.EXISTS", BLOOM_KEY, url):
                         duplicate_count += 1
                         duplicate_ads_batch.append({"content_url": url})
                         continue
-
-                    # Add to Bloom filter
-                    # rdb.execute_command("BF.ADD", BLOOM_KEY, item_id)
 
                     # Copy full ad + add content_url
                     full_ad = item.copy()
@@ -135,7 +132,7 @@ def extract_transform_urls(**kwargs):
                 new_f = result.get("meta", {}).get("f")
                 if new_f:
                     current_params["f"] = new_f
-                    print(f"f updated: {new_f}")
+                    # print(f"f updated: {new_f}")
 
                 if stop_condition:
                     break
@@ -146,6 +143,5 @@ def extract_transform_urls(**kwargs):
                 print(f"Error on page {page}: {e}")
                 break
 
-    # kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
-    print(f"استخراج کامل شد — {len(all_urls)} آگهی جدید به XCom ارسال شد.")
+    print(f"Extraction complete — {len(all_urls)} new items were sent to XCom.")
     return all_urls
