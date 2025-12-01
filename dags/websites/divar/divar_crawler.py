@@ -10,9 +10,6 @@ from utils.config import config
 def extract_transform_urls():
     BLOOM_KEY = f"divar_{config.get('redis_bloom_filter')}"
 
-    print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
-    # print(config["redis_host"])
-    # print(config["redis_port"])
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     # Bloom filter
@@ -21,11 +18,11 @@ def extract_transform_urls():
             rdb.execute_command(
                 "BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2
             )
-            print(f"✅ Bloom filter named {BLOOM_KEY} has been created")
+            print(f"✅ Bloom filter '{BLOOM_KEY}' created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
-    # else:
-    #     print(f"✅ Bloom filter named {BLOOM_KEY} already exists")
+    else:
+        print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
 
     # curl_command
     try:
@@ -35,7 +32,6 @@ def extract_transform_urls():
             encoding="utf-8",
         ) as file:
             curl_command = file.read()
-        print("✅ File curl_command_01.txt was read successfully")
     except Exception as e:
         print(f"❌ Error reading file curl_command_01.txt: {e}")
         return
@@ -46,7 +42,6 @@ def extract_transform_urls():
     try:
         with open("./dags/websites/divar/curl_commands/first_request.txt", "r", encoding="utf-8") as file:
             first_request_curl = file.read()
-        print("✅ first_request_curl.txt loaded successfully")
     except Exception as e:
         print(f"❌ Error reading first_request_curl.txt: {e}")
         return
@@ -66,7 +61,6 @@ def extract_transform_urls():
 
     with httpx.Client(**client_params) as client:
 
-        # print("=== Client Headers ===")
         # print(client.headers)
 
         # GET for get Cookies
@@ -81,14 +75,12 @@ def extract_transform_urls():
 
         for page in range(max_pages):
             try:
-                # update pagination_data
+                # update pagination
                 curl_data["pagination_data"]["page"] = page
                 curl_data["pagination_data"]["layer_page"] = 0
                 parsed_curl["data"] = json.dumps(curl_data)
                 
-                # print("=== Request Sent Headers ===")
-                # for k, v in parsed_curl.get("headers", {}).items():
-                #     print(k, ":", v)
+                print(f" =========== Page: {page} =========== ")
 
                 # POST request
                 response = client.request(
@@ -118,13 +110,9 @@ def extract_transform_urls():
 
                 # for t in tokens:
                 #     print(f"🔹 Token found: {t}")
-
                 # print(f"📄 Page {page}: {result.get('list_widgets')[0].get('data').get('title')}")
-                print(f"Page: {page}")
+                
                 print(f"📊 Number of ads: {len(widgets)}")
-
-                # for w in widgets:
-                #     print(f"🔹 Widget found: {w}")
 
                 # Check for duplicate tokens
                 duplicate_count, new_tokens, duplicate_tokens = 0, [], []
@@ -137,9 +125,6 @@ def extract_transform_urls():
                         duplicate_tokens.append(content_url)
                     else:
                         new_tokens.append(content_url)
-
-                # ratio = duplicate_count / len(tokens) if tokens else 1
-                # print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
                 ratio = duplicate_count / len(tokens) if tokens else 1
                 print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")

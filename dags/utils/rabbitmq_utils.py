@@ -12,7 +12,6 @@ from utils.config import config
 
 logger = logging.getLogger(__name__)
 
-
 def parse_message(body: bytes):
     decoded = body.decode("utf-8")
     # try:
@@ -113,9 +112,6 @@ class RabbitMQSensor(BaseSensorOperator):
                         async for message in queue_iter:
                             async with message.process():
                                 messages.append(parse_message(message.body))
-                                # self.log.info(
-                                #     f"Sensor: Consumed {len(messages)} messages"
-                                # )
 
                             if len(messages) >= self.batch_size:
                                 return messages
@@ -159,15 +155,8 @@ async def publish_messages(queue_name, messages):
         channel = await connection.channel()
         queue = await channel.declare_queue(queue_name, durable=True)
 
-        # rdb = redis.Redis(
-        #     host=config["redis_host"],
-        #     port=config["redis_port"]
-        # )
-
         for message in messages:
             token = message.get("content_url", "").split("/")[-1]
-
-            # rdb.execute_command("BF.ADD", BLOOM_KEY, token)
 
             await channel.default_exchange.publish(
                 Message(
@@ -176,4 +165,3 @@ async def publish_messages(queue_name, messages):
                 ),
                 routing_key=queue.name,
             )
-    # print(f"✅ Sent {len(messages)} URLs to RabbitMQ")

@@ -25,7 +25,7 @@ def xml_to_json_bytesafe(xml_bytes):
 
 def extract_transform_urls():
     BLOOM_KEY = f"kilid_{config.get('redis_bloom_filter')}"
-    print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
+    
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     if not rdb.exists(BLOOM_KEY):
@@ -33,17 +33,16 @@ def extract_transform_urls():
             rdb.execute_command(
                 "BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2
             )
-            print(f"✅ Bloom filter named {BLOOM_KEY} has been created")
+            print(f"✅ Bloom filter '{BLOOM_KEY}' created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
-    # else:
-    #     print(f"✅ Bloom filter named {BLOOM_KEY} already exists")
+    else:
+        print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
 
     # Load curl command
     try:
         with open("./dags/websites/kilid/curl_commands/kilid_curl_command.txt", "r", encoding="utf-8") as file:
             curl_command = file.read()
-        print("✅ File kilid_curl_command.txt was read successfully")
     except Exception as e:
         print(f"❌ Error reading kilid_curl_command.txt: {e}")
         return
@@ -55,7 +54,6 @@ def extract_transform_urls():
     try:
         with open("./dags/websites/kilid/curl_commands/first_request.txt", "r", encoding="utf-8") as file:
             first_request_curl = file.read().replace("\\", "")
-        print("✅ first_request.txt loaded successfully")
     except Exception as e:
         print(f"❌ Error reading first_request.txt: {e}")
         return
@@ -74,12 +72,6 @@ def extract_transform_urls():
     stop_condition = False
 
     with httpx.Client(**client_params) as client:
-        # print("=== Client Headers ===")
-        # print(client.headers)
-
-        # Get initial cookies
-        resp = client.get("https://kilid.com")
-        resp.raise_for_status()
 
         full_url = parsed_curl["url"]
         base_url = full_url.split("?")[0]
@@ -88,6 +80,8 @@ def extract_transform_urls():
         base_params["sort"] = "searchDate_desc"
 
         for page in range(max_pages):
+            print(f" =========== Page: {page} =========== ")
+
             try:
                 base_params["page"] = str(page)
 
@@ -131,8 +125,8 @@ def extract_transform_urls():
                     print(f"⛔️ Page {page}: No IDs found, stopping.")
                     break
 
-                print(f"Page: {page}")
                 print(f"📊 Number of ads: {len(ids)}")
+                
                 # Bloom filter duplicate detection
                 duplicate_count, new_ids, duplicate_ids = 0, [], []
 
@@ -145,7 +139,6 @@ def extract_transform_urls():
                         duplicate_ids.append(url)
                     else:
                         new_ids.append(url)
-                        # rdb.execute_command("BF.ADD", BLOOM_KEY, url)
 
                 ratio = duplicate_count / len(ids) if len(ids) > 0 else 0
                 print(f"📊 {duplicate_count}/{len(ids)} duplicates ({ratio:.0%})")

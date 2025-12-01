@@ -46,18 +46,18 @@ def extract_build_id(client):
     return None
 
 def extract_transform_urls(website_conf=None):
-    # bloom_key = f"{website_conf.get('name')}_{config.get('redis_bloom_filter')}"
     BLOOM_KEY = f"mrestate_{config.get('redis_bloom_filter')}"
-    print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
 
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     if not rdb.exists(BLOOM_KEY):
         try:
             rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.01, 1_000_000, "EXPANSION", 2)
-            print(f"Bloom filter created: {BLOOM_KEY}")
+            print(f"✅ Bloom filter '{BLOOM_KEY}' created")
         except Exception as e:
-            print(f"Bloom init error: {e}")
+            print(f"⚠️ Error while creating Bloom filter: {e}")
+    else:
+        print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
 
     modes = [
         ("buy", "mrestate_curl_command.txt", "buy_residential_apartment"),
@@ -73,15 +73,6 @@ def extract_transform_urls(website_conf=None):
         for mode_name, curl_file, mode_value in modes:
             print(f"⚪Starting → {mode_name.upper()}")
 
-            # # curl
-            # try:
-            #     with open(f"./dags/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8") as f:
-            #         curl_template = f.read()
-            # except Exception as e:
-            #     print(f"Cannot read {curl_file}: {e}")
-            #     continue
-
-            # curl_command
             try:
                 with open(
                     f"./dags/websites/mrestate/curl_commands/{curl_file}",
@@ -89,7 +80,6 @@ def extract_transform_urls(website_conf=None):
                     encoding="utf-8",
                 ) as file:
                     curl_template = file.read()
-                print("✅ File curl_command_01.txt was read successfully")
             except Exception as e:
                 print(f"❌ Error reading file curl_command_01.txt: {e}")
                 return
@@ -123,6 +113,8 @@ def extract_transform_urls(website_conf=None):
 
                 new_query = urlencode(query_params, doseq=True)
                 current_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{new_query}"
+                
+                print(f" =========== Page: {page} =========== ")
 
                 try:
                     resp = client.get(current_url)
@@ -163,11 +155,8 @@ def extract_transform_urls(website_conf=None):
                         new_count += 1
 
                         all_urls.append({"content_url": api_url})
-                        # rdb.execute_command("BF.ADD", BLOOM_KEY, api_url)
 
                     ratio = page_dup / len(items) if items else 0
-                    # print(f"Page {page:3d} → {len(items):2d} ads | New: {page_new:4d} | Dup: {page_dup:3d} ({ratio:.1%})")
-                    print(f"Page: {page}")
                     print(f"📊 Number of ads: {len(items)}")
                     print(f"📊 {page_dup}/{len(items)} duplicates ({ratio:.0%})")
 
