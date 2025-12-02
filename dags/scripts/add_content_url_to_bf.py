@@ -3,7 +3,6 @@ from redisbloom.client import Client as RedisBloom
 import redis
 import sys
 
-# Configs
 MONGO_URI = "mongodb://appuser:appassword@172.16.36.111:27017/delta-datasets"
 MONGO_DB = "delta-datasets"
 MONGO_COLLECTION = "mrestate-dataset_1"
@@ -19,7 +18,6 @@ def ensure_bloom_exists(r, name):
         print(f"ERROR: Bloom filter '{name}' does NOT exist in Redis!")
         sys.exit(1)
     print(f"Bloom filter '{name}' exists. Continuing...")
-
 
 def main():
     mongo = MongoClient(MONGO_URI)
@@ -59,7 +57,6 @@ def main():
         
     print(f"New URLs inserted:  {inserted}")
     print(f"Duplicate URLs:     {duplicates}")
-
 
 if __name__ == "__main__":
     main()
