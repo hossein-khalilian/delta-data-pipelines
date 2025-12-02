@@ -27,7 +27,7 @@ websites:
   - name: kilid
     url: "https://kilid.com/"
     crawler_schedule: "*/10 * * * *"
-    #fetcher_schedule: "*/5 * * * *"
+    fetcher_schedule: "*/5 * * * *"
     crawler: "websites.kilid.kilid_crawler.extract_transform_urls"
-    #fetcher: "websites.mrestate.mrestate_fetcher.fetcher_function"
-    #transformer: "websites.mrestate.mrestate_transformer.transformer_function"
+    fetcher: "websites.kilid.kilid_fetcher.fetcher_function"
+    transformer: "websites.kilid.kilid_transformer.transformer_function"
