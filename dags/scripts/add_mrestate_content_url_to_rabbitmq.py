@@ -1,16 +1,17 @@
 from pymongo import MongoClient
 import pika
 import json
+import os 
 
-MONGO_URI = "mongodb://appuser:appassword@172.16.36.111:27017/delta-datasets"
-MONGO_DB = "delta-datasets"
-MONGO_COLLECTION = "mrestate-dataset_1"
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB = os.getenv("MONGO_DB")
+MONGO_COLLECTION = "mrestate-dataset"
 
-RABBITMQ_HOST = "172.16.36.111"
-RABBITMQ_PORT = 5672
-RABBITMQ_USER = "admin"
-RABBITMQ_PASS = "changethis"
-RABBITMQ_URLS_QUEUE = "mrestate_urls_1"
+RABBITMQ_HOST = os.getenv("rabbitmq_host")
+RABBITMQ_PORT = os.getenv("rabbitmq_port")
+RABBITMQ_USER = os.getenv("rabbitmq_user")
+RABBITMQ_PASS = os.getenv("rabbitmq_pass")
+RABBITMQ_URLS_QUEUE = "mrestate_urls"
 
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client[MONGO_DB]

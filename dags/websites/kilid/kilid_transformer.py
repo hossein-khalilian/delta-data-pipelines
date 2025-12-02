@@ -121,10 +121,10 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
             gallery_imgs = [
                 img["src"]
                 for img in soup.select("div.relative img")
-                if img.get("src")
+                if img.get("src") and img["src"].startswith("https://cdn.kilid.com")
             ]
+
             # Ad code & publish time
-            ad_code = None
             published_time_raw = None
             for div in soup.select('div.flex.items-center.justify-center.gap-1'):
                 text = div.get_text()
