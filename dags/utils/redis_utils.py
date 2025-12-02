@@ -11,7 +11,7 @@ async def add_to_bloom_filter(bloom_key, items):
         return []
 
     result = await r.execute_command("BF.MADD", bloom_key, *items)
-    print(f"✅ BF.MADD result for {bloom_key}: {result}")
+    # print(f"✅ BF.MADD result for {bloom_key}: {result}")
     await r.close()
     return result
 
