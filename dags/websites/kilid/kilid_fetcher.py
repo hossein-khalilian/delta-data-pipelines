@@ -1,7 +1,7 @@
 import httpx
 import json
 from typing import List, Dict, Any
-
+import time 
 def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not messages:
             print("No messages available from Sensor.")
@@ -43,6 +43,8 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "error": f"HTTP {e.response.status_code}",
                     "status_code": e.response.status_code,
                 })
+
+            time.sleep(5)
 
     print(f"Fetcher completed: {len([f for f in fetched_data if f.get('html_content')])} successful out of {len(messages)}")
     return fetched_data
