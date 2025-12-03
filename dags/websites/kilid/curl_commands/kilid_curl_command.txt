@@ -1,4 +1,4 @@
-  curl 'https://kilid.com/api/listing/portal/listing/v1/search?city=272905&listingType=BUY&sort=searchDate_desc&size=25&page=0' \
+  curl 'https://kilid.com/api/listing/portal/listing/v1/search?city={{CITY}}&listingType={{TYPE}}&sort=searchDate_desc&size=25&page=0' \
   --compressed \
   -H 'accept: application/json, text/plain, */*' \
   -H 'accept-language: en-US,en;q=0.9' \

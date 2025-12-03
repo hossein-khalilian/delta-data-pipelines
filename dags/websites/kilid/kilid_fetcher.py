@@ -6,6 +6,9 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not messages:
             print("No messages available from Sensor.")
             return []
+        
+    messages = messages[:5]
+
     fetched_data = []
 
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
@@ -44,7 +47,7 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "status_code": e.response.status_code,
                 })
 
-            time.sleep(5)
+            time.sleep(3)
 
     print(f"Fetcher completed: {len([f for f in fetched_data if f.get('html_content')])} successful out of {len(messages)}")
     return fetched_data

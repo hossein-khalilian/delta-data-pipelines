@@ -5,6 +5,7 @@ import redis
 from curl2json.parser import parse_curl
 from utils.config import config
 from xml.etree import ElementTree as ET
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 def xml_to_json_bytesafe(xml_bytes):
     root = ET.fromstring(xml_bytes)
@@ -25,30 +26,42 @@ def xml_to_json_bytesafe(xml_bytes):
 
 def extract_transform_urls():
     BLOOM_KEY = f"kilid_{config.get('redis_bloom_filter')}"
-    
     rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
 
     if not rdb.exists(BLOOM_KEY):
         try:
-            rdb.execute_command(
-                "BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2
-            )
+            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2)
             print(f"✅ Bloom filter '{BLOOM_KEY}' created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
     else:
         print(f"✅ Using Bloom Filter: {BLOOM_KEY}")
 
-    # Load curl command
+    # curl command
     try:
         with open("./dags/websites/kilid/curl_commands/kilid_curl_command.txt", "r", encoding="utf-8") as file:
-            curl_command = file.read()
+            curl_command_template = file.read()
     except Exception as e:
         print(f"❌ Error reading kilid_curl_command.txt: {e}")
         return
 
-    parsed_curl = parse_curl(curl_command)
-    parsed_curl.pop("cookies", None)
+    parsed_curl_template = parse_curl(curl_command_template)
+    parsed_curl_template.pop("cookies", None)
+    
+    # CITY + TYPE 
+    CITY_MAP = {
+        "tehran": "272905",
+        "karaj": "273014",
+        "isfahan": "272903",
+        "shiraz": "272896",
+        "mashhad": "272895",
+        "rasht": "242556",
+        "sari": "242580",
+        "tabriz": "242459",
+        "qom": "242483",
+    }
+
+    TARGET_CITIES = list(CITY_MAP.keys())
 
     # Load first request for cookies
     try:
@@ -61,105 +74,141 @@ def extract_transform_urls():
     parsed_first = parse_curl(first_request_curl)
     cookies = parsed_first.pop("cookies", {})
 
+    # client params
     client_params = {
         "verify": True,
-        "headers": parsed_curl.pop("headers", {}),
         "cookies": cookies,
     }
 
     all_urls = []
-    max_pages = 50
-    stop_condition = False
+    max_pages = 10
 
     with httpx.Client(**client_params) as client:
 
-        full_url = parsed_curl["url"]
-        base_url = full_url.split("?")[0]
-        query_string = full_url.split("?")[1] if "?" in full_url else ""
-        base_params = dict(p.split("=") for p in query_string.split("&")) if query_string else {}
-        base_params["sort"] = "searchDate_desc"
+        total_extracted = 0
 
-        for page in range(max_pages):
-            print(f" =========== Page: {page} =========== ")
+        modes = [
+            ("BUY", TARGET_CITIES),
+            ("RENT", TARGET_CITIES),
+        ]
 
-            try:
-                base_params["page"] = str(page)
-
-                response = client.request(
-                    method=parsed_curl.get("method", "GET"),
-                    url=base_url,
-                    headers=client_params["headers"],
-                    params=base_params,
-                )
-                response.raise_for_status()
-
-                raw = response.content  
+        for listing_type, city_list in modes:
+            print(f"⚪ STARTING TYPE → {listing_type}")
+            
+            for city_key in city_list:
 
                 try:
-                    result = json.loads(raw)
-                    # print(f"✅ Page {page}: JSON parsed")
+                    concrete_curl = curl_command_template.replace("{{CITY}}", CITY_MAP[city_key]).replace("{{TYPE}}", listing_type)
+                except Exception as e:
+                    print(f"❌ Error building URL for {city_key}/{listing_type}: {e}")
+                    continue
 
-                    if isinstance(result, list):
-                        widgets = result
-                    elif isinstance(result, dict):
-                        widgets = result.get("data", {}).get("result", [])  
+                parsed_curl = parse_curl(concrete_curl)
+                mode_headers = parsed_curl.get("headers", {})
+                if isinstance(mode_headers, dict):
+                    client.headers.update(mode_headers)
+
+                base_url_template = parsed_curl.get("url", "")
+                if not base_url_template:
+                    print(f"❌ No URL found in parsed curl for {city_key}/{listing_type}")
+                    continue
+
+                parsed_url = urlparse(base_url_template)
+                base_scheme_netloc_path = (parsed_url.scheme, parsed_url.netloc, parsed_url.path, "", "", "")
+
+                page = 1
+                stop = False
+                new_count = 0
+                dup_count = 0
+
+                while page <= max_pages and not stop:
+                    query_params = parse_qs(parsed_url.query)  
+                    if page == 0 or page == 1:
+                        query_params.pop("page", None)
                     else:
-                        widgets = []
-                        print(f"⚠️ Page {page}: Unexpected JSON structure")
+                        query_params["page"] = [str(page)]
 
+                    query_params["sort"] = ["searchDate_desc"]
 
-                except json.JSONDecodeError: 
-                    print(f"⚠️ Page {page}: XML detected (bytesafe parsing)...")
+                    new_query = urlencode(query_params, doseq=True)
+                    current_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, "", new_query, ""))
+
+                    print(f" ========== Page: {page} | {city_key} ========== ")
+
                     try:
-                        result = xml_to_json_bytesafe(raw)
-                        count = len(result["data"]["result"]["result"])
-                        print(f"✅ Page {page}: XML converted → JSON ({count} ids)")
-                        widgets = result["data"]["result"]["result"]
-                    except ET.ParseError as parse_err:
-                        print(f"❌ XML Parse Error on page {page}: {parse_err}")
-                        continue  
+                        response = client.request(
+                            method=parsed_curl.get("method", "GET"),
+                            url=current_url,
+                            headers=mode_headers,
+                            timeout=30.0,
+                        )
+                        response.raise_for_status()
+                        raw = response.content
 
-                ids = [w.get("id") for w in widgets if w.get("id")]
+                        try:
+                            result = json.loads(response.text)
+                            if isinstance(result, list):
+                                widgets = result
+                            elif isinstance(result, dict):
+                                widgets = result.get("data", {}).get("result", [])
+                                if not widgets and "result" in result:
+                                    widgets = result.get("result", [])
+                            else:
+                                widgets = []
+                                print(f"⚠️ Page {page}: Unexpected JSON structure")
+                        except json.JSONDecodeError:
+                            print(f"⚠️ Page {page}: XML detected (bytesafe parsing)...")
+                            try:
+                                xml_converted = xml_to_json_bytesafe(raw)
+                                widgets = xml_converted["data"]["result"]["result"]
+                                count = len(widgets)
+                                print(f"✅ Page {page}: XML converted → JSON ({count} ids)")
+                            except ET.ParseError as parse_err:
+                                print(f"❌ XML Parse Error on page {page}: {parse_err}")
+                                widgets = []
 
-                if not ids:
-                    print(f"⛔️ Page {page}: No IDs found, stopping.")
-                    break
+                        ids = [w.get("id") for w in widgets if isinstance(w, dict) and w.get("id")]
+                        if not ids:
+                            print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
+                            break
 
-                print(f"📊 Number of ads: {len(ids)}")
-                
-                # Bloom filter duplicate detection
-                duplicate_count, new_ids, duplicate_ids = 0, [], []
+                        page_new = 0
+                        page_dup = 0
 
-                for id_val in ids:
-                    url = f"https://kilid.com/detail/{id_val}"
+                        for id_val in ids:
+                            if not id_val:
+                                continue
+                            detail_url = f"https://kilid.com/detail/{id_val}"
 
-                    exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, url)
-                    if exists:
-                        duplicate_count += 1
-                        duplicate_ids.append(url)
-                    else:
-                        new_ids.append(url)
+                            exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, detail_url)
+                            if exists:
+                                page_dup += 1
+                                dup_count += 1
+                                continue
 
-                ratio = duplicate_count / len(ids) if len(ids) > 0 else 0
-                print(f"📊 {duplicate_count}/{len(ids)} duplicates ({ratio:.0%})")
+                            page_new += 1
+                            new_count += 1
+                            all_urls.append({"content_url": detail_url})
 
-                if ratio >= 0.3:
-                    print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
-                    stop_condition = True
+                        ratio = page_dup / len(ids) if len(ids) > 0 else 0
+                        print(f"📊 Number of ads: {len(ids)}")
+                        print(f"📊 {page_dup}/{len(ids)} duplicates ({ratio:.0%})")
 
-                all_ids_to_push = new_ids if stop_condition else new_ids + duplicate_ids
+                        if ratio >= 0.30:
+                            print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
+                            stop = True
+                            break
 
-                new_urls = [{"content_url": url} for url in all_ids_to_push]
-                all_urls.extend(new_urls)
+                        page += 1
+                        time.sleep(5)
 
-                if stop_condition:
-                    break
+                    except Exception as e:
+                        print(f"❌ Error on page {page} for {city_key}/{listing_type}: {e}")
+                        break
 
-                time.sleep(1.5)
+                print(f"{city_key} / {listing_type} finished → {new_count} new urls extracted")
 
-            except Exception as e:
-                print(f"❌ Error on page {page}: {e}")
-                break
+                total_extracted += new_count
 
-    print(f"✅ Extraction completed — {len(all_urls)} URLs extracted")
-    return list(all_urls)
+        print(f"✅ Extraction completed — {total_extracted} new urls extracted (all modes)")
+        return all_urls

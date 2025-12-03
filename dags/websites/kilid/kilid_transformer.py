@@ -42,17 +42,10 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
     transformed_results = []
 
     feature_map = {
-        "متراژ": "building_size",
-        "زیربنا": "building_size",
-        "متراژ بنا": "building_size",
-        "متراژ زمین": "land_size",
-        "زمین": "land_size",
         "طبقه": "floor",
         "تعداد طبقات": "total_floors_count",
         "تعداد اتاق": "rooms_count",
         "تعداد واحد در طبقه": "unit_per_floor",
-        "سال ساخت": "construction_year",
-        "نوسازی شده": "is_rebuilt",
 
         "پارکینگ": "has_parking",
         "انباری": "has_warehouse",
@@ -96,7 +89,17 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
         "lng": "location_longitude",
         "radius": "location_radius",
     }
-
+    def normalize_deed_type(value: str):
+        if not value:
+            return None
+        value = clean_text(value)
+        value = value.replace("نوع سند", "").replace(":", "").strip()
+        if "تک برگ" in value:
+            return "تک برگ"
+        if "قولنامه" in value:
+            return "قولنامه ای"
+        return value
+    
     def map_feature(key, value, out):
         if key in feature_map:
             out[feature_map[key]] = persian_to_english_digits(value)
@@ -115,8 +118,8 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
             # Breadcrumbs
             breadcrumbs = [a.get_text(strip=True) for a in soup.select('nav[aria-label="breadcrumb"] a')]
             cat2_slug = breadcrumbs[1] if len(breadcrumbs) > 1 else None
-            cat3_slug = breadcrumbs[2] if len(breadcrumbs) > 2 else None
-            city_slug = breadcrumbs[3] if len(breadcrumbs) > 3 else None
+            cat3_slug = breadcrumbs[3] if len(breadcrumbs) > 3 else None
+            city_slug = breadcrumbs[2] if len(breadcrumbs) > 2 else None
             neighborhood_slug = breadcrumbs[4] if len(breadcrumbs) > 4 else None
             gallery_imgs = [
                 img["src"]
@@ -160,7 +163,7 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
 
             # Document type
             doc_div = soup.select_one('div.inline-flex.items-center.bg-gray-50')
-            document_type = clean_text(doc_div.get_text()) if doc_div else None
+            document_type = normalize_deed_type(doc_div.get_text()) if doc_div else None
 
             # features
             raw_features = {}
@@ -185,6 +188,30 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
             # description
             desc_div = soup.find("div", class_=re.compile(r"transition-all\s+duration-300"))
             description = clean_text(desc_div.get_text(separator="\n")) if desc_div else None
+
+            building_size = None
+            for span in soup.select('span.text-nowrap'):
+                txt = clean_text(span.get_text())
+                if re.search(r"\d+\s*متر", txt):
+                    num = persian_to_english_digits(re.findall(r"\d+", txt)[0])
+                    building_size = int(num) if num.isdigit() else None
+                    break
+
+            construction_year = None
+            for span in soup.select('span.text-nowrap'):
+                txt = clean_text(span.get_text())
+                m = re.search(r"ساخت\s*(\d+)", txt)
+                if m:
+                    num = persian_to_english_digits(m.group(1))
+                    construction_year = int(num) if num.isdigit() else None
+                    break
+                
+            is_rebuilt = False
+            for btn in soup.select("button span"):
+                txt = clean_text(btn.get_text())
+                if "بازسازی شده" in txt:
+                    is_rebuilt = True
+                    break
 
             out = {
                 "created_at": datetime.now(),
@@ -222,7 +249,7 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
 
                 # defaults for ALL mapped fields (ensures field always exists)
                 "land_size": None,
-                "building_size": None,
+                "building_size": building_size,
                 "deed_type": document_type,
                 "has_business_deed": None,
                 "floor": None,
@@ -233,8 +260,8 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
                 "has_elevator": None,
                 "has_warehouse": None,
                 "has_parking": None,
-                "construction_year": None,
-                "is_rebuilt": None,
+                "construction_year": construction_year,
+                "is_rebuilt": is_rebuilt,
                 "has_water": None,
                 "has_warm_water_provider": None,
                 "has_electricity": None,
