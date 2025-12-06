@@ -7,8 +7,8 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             print("No messages available from Sensor.")
             return []
         
-    messages = messages[:5]
-
+    messages = messages[:5]  # 
+        
     fetched_data = []
 
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
@@ -23,12 +23,17 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 response = client.get(url)
                 response.raise_for_status()
 
-                fetched_data.append({
+                fetched_item = {
                     "content_url": url,
                     "html_content": response.text,
                     "status_code": response.status_code,
                     "fetched_at": response.headers.get("date"),
-                })
+                    "listingType": msg.get("listingType"),
+                    "propertyType": msg.get("propertyType"),
+                    "landuseType": msg.get("landuseType")
+                }
+
+                fetched_data.append(fetched_item)
 
             except httpx.RequestError as e:
                 print(f"Request error for {url}: {e}")
@@ -37,6 +42,9 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "html_content": None,
                     "error": str(e),
                     "status_code": getattr(e, "status_code", None),
+                    "listingType": msg.get("listingType"),
+                    "propertyType": msg.get("propertyType"),
+                    "landuseType": msg.get("landuseType")
                 })
             except httpx.HTTPStatusError as e:
                 print(f"HTTP error {e.response.status_code} for {url}")
@@ -45,6 +53,10 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "html_content": None,
                     "error": f"HTTP {e.response.status_code}",
                     "status_code": e.response.status_code,
+
+                    "listingType": msg.get("listingType"),
+                    "propertyType": msg.get("propertyType"),
+                    "landuseType": msg.get("landuseType")
                 })
 
             time.sleep(3)

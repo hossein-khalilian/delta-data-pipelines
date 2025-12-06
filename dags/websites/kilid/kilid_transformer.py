@@ -116,11 +116,10 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
 
         try:
             # Breadcrumbs
-            breadcrumbs = [a.get_text(strip=True) for a in soup.select('nav[aria-label="breadcrumb"] a')]
-            cat2_slug = breadcrumbs[1] if len(breadcrumbs) > 1 else None
-            cat3_slug = breadcrumbs[3] if len(breadcrumbs) > 3 else None
-            city_slug = breadcrumbs[2] if len(breadcrumbs) > 2 else None
-            neighborhood_slug = breadcrumbs[4] if len(breadcrumbs) > 4 else None
+            breadcrumbs_list = [a.get_text(strip=True) for a in soup.select('nav[aria-label="breadcrumb"] a')]
+            breadcrumbs = "/".join(breadcrumbs_list) if breadcrumbs_list else None
+            city_slug = breadcrumbs_list[2] if len(breadcrumbs_list) > 2 else None
+            neighborhood_slug = breadcrumbs_list[4] if len(breadcrumbs_list) > 4 else None
             gallery_imgs = [
                 img["src"]
                 for img in soup.select("div.relative img")
@@ -189,6 +188,14 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
             desc_div = soup.find("div", class_=re.compile(r"transition-all\s+duration-300"))
             description = clean_text(desc_div.get_text(separator="\n")) if desc_div else None
 
+            user_type = None
+            owner_span = soup.find("span", string=re.compile("مالک"))
+            if owner_span:
+                user_type = "شخصی"
+            agency_span = soup.find("span", string=re.compile("آژانس"))
+            if agency_span:
+                user_type = "مشاور املاک"
+
             building_size = None
             for span in soup.select('span.text-nowrap'):
                 txt = clean_text(span.get_text())
@@ -215,14 +222,15 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
 
             out = {
                 "created_at": datetime.now(),
-
-                "cat2_slug": cat2_slug,
-                "cat3_slug": cat3_slug,
+                "breadcrumbs": breadcrumbs,
+                "cat1_slug" : item.get("listingType"),
+                "cat2_slug": item.get("landuseType"),
+                "cat3_slug": item.get("propertyType"),
                 "city_slug": city_slug,
                 "neighborhood_slug": neighborhood_slug,
                 "created_at_month": datetime.now().strftime("%Y-%m"),
 
-                "user_type": raw_features.get("نوع آگهی"),
+                "user_type": user_type,
 
                 "description": description,
                 "title": title,

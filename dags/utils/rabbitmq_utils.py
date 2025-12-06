@@ -3,7 +3,6 @@ import json
 import logging
 from datetime import datetime
 
-import redis
 from aio_pika import Message, connect_robust
 from airflow.sensors.base import BaseSensorOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
@@ -14,11 +13,8 @@ logger = logging.getLogger(__name__)
 
 def parse_message(body: bytes):
     decoded = body.decode("utf-8")
-    # try:
-    return json.loads(decoded)  # parse JSON
-    # except json.JSONDecodeError:
-    #     return decoded  # return as string if not JSON
 
+    return json.loads(decoded) # parse JSON
 
 class RabbitMQSensorTrigger(BaseTrigger):
     def __init__(self, queue_name: str, batch_size: int = 1, timeout: int = 60):

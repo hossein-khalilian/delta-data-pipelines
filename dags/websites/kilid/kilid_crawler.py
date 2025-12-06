@@ -13,8 +13,19 @@ def xml_to_json_bytesafe(xml_bytes):
     items = []
     for elem in root.findall(".//result"):
         id_elem = elem.find("id")
+        listing_type_elem = elem.find("listingType")
+        property_type_elem = elem.find("propertyType")
+        landuse_type_elem = elem.find("landuseType")
+        
         if id_elem is not None and id_elem.text:
-            items.append({"id": id_elem.text})
+            item = {"id": id_elem.text}
+            if listing_type_elem is not None:
+                item["listingType"] = listing_type_elem.text
+            if property_type_elem is not None:
+                item["propertyType"] = property_type_elem.text
+            if landuse_type_elem is not None:
+                item["landuseType"] = landuse_type_elem.text
+            items.append(item)
 
     return {
         "data": {
@@ -114,7 +125,6 @@ def extract_transform_urls():
                     continue
 
                 parsed_url = urlparse(base_url_template)
-                base_scheme_netloc_path = (parsed_url.scheme, parsed_url.netloc, parsed_url.path, "", "", "")
 
                 page = 1
                 stop = False
@@ -143,16 +153,25 @@ def extract_transform_urls():
                             timeout=30.0,
                         )
                         response.raise_for_status()
+                        
                         raw = response.content
-
+                        
+                        # -------------------------
+                        # if not raw:
+                        #     print(f"⚠️ Page {page}: empty")
+                        #     break
+                        # print(f"📄 RAW RESPONSE SAMPLE (Page {page}): {response.text[:300]}...")
+                        # -------------------------
+                        
                         try:
                             result = json.loads(response.text)
                             if isinstance(result, list):
                                 widgets = result
                             elif isinstance(result, dict):
                                 widgets = result.get("data", {}).get("result", [])
-                                if not widgets and "result" in result:
-                                    widgets = result.get("result", [])
+                                if not isinstance(widgets, list):
+                                    print(f"⚠️ Unexpected JSON structure: widgets is {type(widgets)}")
+                                    widgets = []
                             else:
                                 widgets = []
                                 print(f"⚠️ Page {page}: Unexpected JSON structure")
@@ -167,15 +186,15 @@ def extract_transform_urls():
                                 print(f"❌ XML Parse Error on page {page}: {parse_err}")
                                 widgets = []
 
-                        ids = [w.get("id") for w in widgets if isinstance(w, dict) and w.get("id")]
-                        if not ids:
+                        if not widgets:
                             print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
                             break
 
                         page_new = 0
                         page_dup = 0
 
-                        for id_val in ids:
+                        for w in widgets:
+                            id_val = w.get("id")
                             if not id_val:
                                 continue
                             detail_url = f"https://kilid.com/detail/{id_val}"
@@ -188,11 +207,16 @@ def extract_transform_urls():
 
                             page_new += 1
                             new_count += 1
-                            all_urls.append({"content_url": detail_url})
+                            all_urls.append({
+                                "content_url": detail_url,
+                                "listingType": w.get("listingType"),
+                                "propertyType": w.get("propertyType"),
+                                "landuseType": w.get("landuseType")
+                            })
 
-                        ratio = page_dup / len(ids) if len(ids) > 0 else 0
-                        print(f"📊 Number of ads: {len(ids)}")
-                        print(f"📊 {page_dup}/{len(ids)} duplicates ({ratio:.0%})")
+                        ratio = page_dup / len(widgets) if len(widgets) > 0 else 0
+                        print(f"📊 Number of ads: {len(widgets)}")
+                        print(f"📊 {page_dup}/{len(widgets)} duplicates ({ratio:.0%})")
 
                         if ratio >= 0.30:
                             print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
