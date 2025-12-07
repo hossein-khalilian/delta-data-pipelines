@@ -1,10 +1,13 @@
 import asyncio
 import json
 import time
+
 import httpx
 import redis
 from curl2json.parser import parse_curl
+
 from utils.config import config
+
 
 # ETL for crawler DAG
 def extract_transform_urls():
@@ -40,7 +43,11 @@ def extract_transform_urls():
     parsed_curl.pop("cookies", None)
 
     try:
-        with open("./dags/websites/divar/curl_commands/first_request.txt", "r", encoding="utf-8") as file:
+        with open(
+            "./dags/websites/divar/curl_commands/first_request.txt",
+            "r",
+            encoding="utf-8",
+        ) as file:
             first_request_curl = file.read()
     except Exception as e:
         print(f"❌ Error reading first_request_curl.txt: {e}")
@@ -79,7 +86,7 @@ def extract_transform_urls():
                 curl_data["pagination_data"]["page"] = page
                 curl_data["pagination_data"]["layer_page"] = 0
                 parsed_curl["data"] = json.dumps(curl_data)
-                
+
                 print(f" =========== Page: {page} =========== ")
 
                 # POST request
@@ -91,7 +98,7 @@ def extract_transform_urls():
                     params=parsed_curl.get("params"),
                 )
                 response.raise_for_status()
-                
+
                 # print("=== Response Headers ===")
                 # print(response.headers)
 
@@ -111,7 +118,7 @@ def extract_transform_urls():
                 # for t in tokens:
                 #     print(f"🔹 Token found: {t}")
                 # print(f"📄 Page {page}: {result.get('list_widgets')[0].get('data').get('title')}")
-                
+
                 print(f"📊 Number of ads: {len(widgets)}")
 
                 # Check for duplicate tokens
@@ -129,7 +136,7 @@ def extract_transform_urls():
                 ratio = duplicate_count / len(tokens) if tokens else 1
                 print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
-                if ratio >= 0.3:
+                if ratio >= 0.5:
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
                     stop_condition = True
 
