@@ -1,16 +1,16 @@
 curl 'https://kilid.com/' \
   --compressed \
-  -H 'User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0' \
-  -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
-  -H 'Accept-Language: en-US,en;q=0.5' \
-  -H 'Accept-Encoding: gzip, deflate, br, zstd' \
-  -H 'Referer: https://www.google.com/' \
-  -H 'Sec-GPC: 1' \
-  -H 'Upgrade-Insecure-Requests: 1' \
-  -H 'Sec-Fetch-Dest: document' \
-  -H 'Sec-Fetch-Mode: navigate' \
-  -H 'Sec-Fetch-Site: cross-site' \
-  -H 'Connection: keep-alive' \
-  -H 'Cookie: session=eyJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uSWQiOiJhYjkxNTRjZi01ODI1LTQ5OTAtYmUwMi1iYjFiMDNjOTZiOTAiLCJleHBpcmVzQXQiOiIyMDI1LTEyLTI3VDA5OjMzOjQ3LjYxOVoiLCJpYXQiOjE3NjQyMzYwMjcsImV4cCI6MTc2NDg0MDgyN30.RWRiMMG60XqEGYG7yzeJ5SIqojnC06ftivcHsoTJWFc' \
-  -H 'Priority: u=0, i' \
-  -H 'TE: trailers'
+  -H 'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7' \
+  -H 'accept-language: en-US,en;q=0.9' \
+  -b '_gcl_au=1.1.722115884.1765115562; analytics_token=95a41dbe-29a2-8498-3f72-9c74dc2f6b1d; analytics_campaign={%22source%22:%22google%22%2C%22medium%22:%22organic%22}; yektanet_session_last_activity=12/7/2025; _yngt_iframe=1; analytics_session_token=a87e94ea-38ee-d0c2-3e5a-bdfd44ddd10c; _ga=GA1.1.401950081.1765115564; _yngt=c06b4a1b-3e86-4d51-ab55-92120382f637; session=eyJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uSWQiOiJkMzRhMmI4OS04YmRhLTQxOGMtYmY1Ni0wZmRmNjAyZjNkYzIiLCJleHBpcmVzQXQiOiIyMDI2LTAxLTA2VDE0OjMyOjU5LjU1NVoiLCJpYXQiOjE3NjUxMTc5NzksImV4cCI6MTc2NTcyMjc3OX0.cV__gT1QQphwTp3GbgjeAu9JuPCMFN_UY7wffG1gXVk; _ga_Q38XYH2M2N=GS2.1.s1765115563$o1$g1$t1765117989$j60$l0$h363462251; ph_phc_tWKQQfjmxq6yrh9fkjUN4Oac53cDtrpvqWwQK2dyr5f_posthog=%7B%22distinct_id%22%3A%22019af916-0ec3-722e-b247-24c31a364b6e%22%2C%22%24sesid%22%3A%5B1765117989262%2C%22019af916-1a5c-762d-bf0b-3ee201a3a36a%22%2C1765115566671%5D%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22https%3A%2F%2Fwww.google.com%2F%22%2C%22u%22%3A%22https%3A%2F%2Fkilid.com%2F%22%7D%7D' \
+  -H 'priority: u=0, i' \
+  -H 'referer: https://www.google.com/' \
+  -H 'sec-ch-ua: "Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"' \
+  -H 'sec-fetch-dest: document' \
+  -H 'sec-fetch-mode: navigate' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'sec-fetch-user: ?1' \
+  -H 'upgrade-insecure-requests: 1' \
+  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36'

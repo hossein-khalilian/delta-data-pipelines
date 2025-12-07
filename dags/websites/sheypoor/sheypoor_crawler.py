@@ -134,7 +134,7 @@ def extract_transform_urls(**kwargs):
                 if stop_condition:
                     break
 
-                time.sleep(10)
+                time.sleep(15)
 
             except Exception as e:
                 print(f"Error on page {page}: {e}")

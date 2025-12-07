@@ -1,4 +1,17 @@
-curl 'https://www.sheypoor.com/api/v10.0.0/search/iran/real-estate?p=1' \
-  -H 'User-Agent: Mozilla/5.0' \
-  -H 'Accept: application/json' \
-  --compressed
+curl 'https://www.sheypoor.com/api/v10.0.0/search/iran/real-estate?f=%5B0.0%2C%201765126189670%5D_458119515n&p=1' \
+  --compressed \
+  -H 'accept: application/vnd.api+json' \
+  -H 'accept-language: en-US,en;q=0.9' \
+  -H 'baggage: sentry-environment=production,sentry-release=_rexIWA4OXJakMDi5IMUl,sentry-public_key=b8fb35046ea4441f96cd931320cf57c7,sentry-trace_id=eca10727a00f4069b38c152750dcfc9b,sentry-sample_rate=0.1,sentry-sampled=false' \
+  -H 'content-type: application/vnd.api+json' \
+  -b '_ga=GA1.1.1510425698.1765113269; neighbourhood=; provinceID=; province=; cityID=; city=; geo=dont-care; provinces=; cities=; _ga_67M81PLT2N=GS2.1.s1765113268$o1$g1$t1765113999$j60$l0$h0' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://www.sheypoor.com/s/iran/real-estate' \
+  -H 'sec-ch-ua: "Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'sentry-trace: eca10727a00f4069b38c152750dcfc9b-9adee5e18a0b706d-0' \
+  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36'

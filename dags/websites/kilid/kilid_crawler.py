@@ -108,40 +108,46 @@ def extract_transform_urls():
             
             for city_key in city_list:
 
-                try:
-                    concrete_curl = curl_command_template.replace("{{CITY}}", CITY_MAP[city_key]).replace("{{TYPE}}", listing_type)
-                except Exception as e:
-                    print(f"❌ Error building URL for {city_key}/{listing_type}: {e}")
-                    continue
+                # Parse curl once, without template replace
+                parsed_curl = parse_curl(curl_command_template)
 
-                parsed_curl = parse_curl(concrete_curl)
                 mode_headers = parsed_curl.get("headers", {})
                 if isinstance(mode_headers, dict):
                     client.headers.update(mode_headers)
 
-                base_url_template = parsed_curl.get("url", "")
-                if not base_url_template:
-                    print(f"❌ No URL found in parsed curl for {city_key}/{listing_type}")
+                base_url = parsed_curl.get("url", "")
+                if not base_url:
+                    print(f"❌ No URL found in curl template")
                     continue
 
-                parsed_url = urlparse(base_url_template)
+                parsed_url = urlparse(base_url)
+                original_params = parse_qs(parsed_url.query)
 
-                page = 1
+                # Dynamically override city & type
+                original_params["city"] = [CITY_MAP[city_key]]
+                original_params["listingType"] = [listing_type]
+
+                page = 0
                 stop = False
                 new_count = 0
                 dup_count = 0
 
                 while page <= max_pages and not stop:
-                    query_params = parse_qs(parsed_url.query)  
-                    if page == 0 or page == 1:
-                        query_params.pop("page", None)
-                    else:
-                        query_params["page"] = [str(page)]
+                    query_params = original_params.copy()
 
+                    query_params["page"] = [str(page)]
                     query_params["sort"] = ["searchDate_desc"]
 
                     new_query = urlencode(query_params, doseq=True)
-                    current_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, "", new_query, ""))
+
+                    current_url = urlunparse((
+                        parsed_url.scheme,
+                        parsed_url.netloc,
+                        parsed_url.path,
+                        "",
+                        new_query,
+                        ""
+                    ))
 
                     print(f" ========== Page: {page} | {city_key} ========== ")
 
