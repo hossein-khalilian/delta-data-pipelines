@@ -45,11 +45,9 @@ def parse_toman_amount(text: str):
     text = clean_text(text)
     text = persian_to_english_digits(text)
 
-    # اگر توافقی بود، همون متن برگرده
     if "توافقی" in text:
         return text
 
-    # فقط عدد
     number_match = re.search(r"(\d+)", text)
     if not number_match:
         return text 
@@ -157,7 +155,6 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
         val = clean_text(str(value))
         val = persian_to_english_digits(val)
 
-        # منطق فقط برای آسانسور و انباری
         if key == "آسانسور":
             if "ندارد" in val:
                 out["has_elevator"] = False
@@ -176,7 +173,6 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
                 out["has_warehouse"] = None
             return
 
-        # سایر فیلدها بدون تغییر
         if key in feature_map:
             out[feature_map[key]] = val
 
@@ -254,18 +250,15 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
                 full_text = clean_text(div.get_text())
                 full_text = persian_to_english_digits(full_text)
 
-                # ───── Parking smart detection ─────
+                # Parking detection
                 if "پارکینگ" in full_text:
 
-                    # حالت: "اشاره نشده"
                     if "اشاره" in full_text:
                         raw_features["پارکینگ"] = None
 
-                    # حالت: ندارد
                     elif "ندارد" in full_text:
                         raw_features["پارکینگ"] = False
 
-                    # حالت عددی: "1 پارکینگ" / "2 پارکینگ"
                     else:
                         n = re.search(r"(\d+)", full_text)
                         if n:
@@ -352,7 +345,7 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
                 if cat1_slug == "RENT":
                     if "رهن و اجاره" in label_text and "توافقی" in value_text:
                         rent_mode_direct = "توافقی"
-            # --------- Extract credit_value for RENT from labeled block ---------
+            # credit_value 
             if cat1_slug == "RENT":
                 credit_value = None
                 credit_labels = soup.select(
@@ -369,7 +362,6 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
                     label_text = clean_text(label_el.get_text())
                     value_text = clean_text(value_el.get_text())
 
-                    # اگر لیبل شامل "رهن" بود
                     if "رهن" in label_text and "تومان" in label_text:
                         credit_value = parse_toman_amount(value_text)
                         break
@@ -460,7 +452,7 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
             for k, v in raw_additional.items():
                 map_feature(k, v, out)
                 
-            # --------- Detect rent_type from HTML ---------
+            # Detect rent_type from HTML
             rent_type_direct = None
 
             rent_type_blocks = soup.select(
@@ -475,9 +467,7 @@ def transformer_function(fetched_data: List[Dict[str, Any]]) -> List[Dict[str, A
                 label_text = clean_text(label.get_text(strip=True))
                 value_text = clean_text(value.get_text(strip=True))
 
-                # اگر آگهی RENT بود و اجاره = رهن کامل
                 if cat1_slug == "RENT":
-                    # if "اجاره" in label_text and "رهن کامل" in value_text:
                     if "رهن کامل" in value_text:
                         rent_type_direct = "full_credit"
 
