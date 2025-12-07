@@ -7,7 +7,7 @@ def fetcher_function(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             print("No messages available from Sensor.")
             return []
         
-    messages = messages[:5]  # 
+    # messages = messages[:5]  # 
         
     fetched_data = []
 
