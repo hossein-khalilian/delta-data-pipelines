@@ -239,6 +239,10 @@ def extract_transform_urls():
                 print(f"{city_key} / {listing_type} finished → {new_count} new urls extracted")
 
                 total_extracted += new_count
+                time.sleep(5)
+                
+            time.sleep(5)
+
 
         print(f"✅ Extraction completed — {total_extracted} new urls extracted (all modes)")
         return all_urls

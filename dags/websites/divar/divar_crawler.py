@@ -1,13 +1,10 @@
 import asyncio
 import json
 import time
-
 import httpx
 import redis
 from curl2json.parser import parse_curl
-
 from utils.config import config
-
 
 # ETL for crawler DAG
 def extract_transform_urls():
