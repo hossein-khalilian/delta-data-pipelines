@@ -1,12 +1,10 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
-
+from datetime import datetime, timedelta
 from aio_pika import Message, connect_robust
 from airflow.sensors.base import BaseSensorOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
-
 from utils.config import config
 
 logger = logging.getLogger(__name__)
@@ -24,7 +22,7 @@ class RabbitMQSensorTrigger(BaseTrigger):
 
     def serialize(self):
         return (
-            "utils.rabbitmq.rabbitmq_utils.RabbitMQSensorTrigger",
+            "utils.rabbitmq_utils.RabbitMQSensorTrigger",
             {
                 "queue_name": self.queue_name,
                 "batch_size": self.batch_size,
@@ -47,20 +45,20 @@ class RabbitMQSensorTrigger(BaseTrigger):
                 channel = await connection.channel()
                 queue = await channel.declare_queue(self.queue_name, passive=True)
 
-                while True:
-                    async with queue.iterator() as queue_iter:
-                        async for message in queue_iter:
-                            async with message.process():
-                                messages.append(parse_message(message.body))
-                                logger.info(
-                                    f"Trigger: Consumed {len(messages)} messages from {self.queue_name}"
-                                )
+                async with queue.iterator() as queue_iter:
+                    async for message in queue_iter:
+                        async with message.process():
+                            messages.append(parse_message(message.body))
 
-                            if len(messages) >= self.batch_size:
-                                yield TriggerEvent(
-                                    {"status": "success", "messages": messages}
-                                )
-                                return
+                        if len(messages) >= self.batch_size:
+                            yield TriggerEvent({"status": "success", "messages": messages})
+                            return
+
+                        # timeout check
+                        elapsed = (datetime.now() - start_time).total_seconds()
+                        if elapsed >= self.timeout:
+                            yield TriggerEvent({"status": "timeout", "messages": messages})
+                            return
 
                     # Check timeout
                     elapsed = (datetime.now() - start_time).total_seconds()
@@ -78,64 +76,45 @@ class RabbitMQSensorTrigger(BaseTrigger):
                 {"status": "error", "error": str(e), "messages": messages}
             )
 
-
 class RabbitMQSensor(BaseSensorOperator):
     def __init__(
-        self, queue_name: str, batch_size: int = 1, timeout: int = 60, **kwargs
+        self,
+        queue_name: str,
+        batch_size: int = 50,
+        timeout: int = 60,
+        **kwargs
     ):
         super().__init__(**kwargs)
         self.queue_name = queue_name
         self.batch_size = batch_size
-        self.timeout = timeout
+        self.timeout_seconds = timeout
 
     def execute(self, context):
-        async def consume_batch():
-            messages = []
-            start_time = datetime.now()
+        # ✅ always defer immediately
+        self.log.info(f"Deferring sensor for queue: {self.queue_name}")
 
-            try:
-                connection = await connect_robust(
-                    host=config["rabbitmq_host"],
-                    port=config["rabbitmq_port"],
-                    login=config["rabbitmq_user"],
-                    password=config["rabbitmq_pass"],
-                )
-                async with connection:
-                    channel = await connection.channel()
-                    queue = await channel.declare_queue(self.queue_name, passive=True)
+        self.defer(
+            trigger=RabbitMQSensorTrigger(
+                queue_name=self.queue_name,
+                batch_size=self.batch_size,
+                timeout=self.timeout_seconds,
+            ),
+            method_name="execute_complete",
+            timeout=timedelta(seconds=self.timeout_seconds),
+        )
 
-                    async with queue.iterator() as queue_iter:
-                        async for message in queue_iter:
-                            async with message.process():
-                                messages.append(parse_message(message.body))
+    def execute_complete(self, context, event=None):
+        if not event:
+            raise ValueError("No event received from trigger")
 
-                            if len(messages) >= self.batch_size:
-                                return messages
+        status = event.get("status")
+        messages = event.get("messages", [])
 
-                            elapsed = (datetime.now() - start_time).total_seconds()
-                            if elapsed >= self.timeout:
-                                self.log.warning(
-                                    f"Sensor: Timeout reached, returning {len(messages)} messages"
-                                )
-                                return messages
-            except Exception as e:
-                self.log.error(f"Sensor error: {e}")
-                return messages
+        if status == "error":
+            raise RuntimeError(event.get("error"))
 
-        messages = asyncio.run(consume_batch())
+        self.log.info(f"✅ Trigger returned {len(messages)} messages")
 
-        self.log.info(f"✅ Consumed {len(messages)} URLs")
-
-        if not messages:
-            self.log.info(f"Deferring check for queue {self.queue_name}")
-            raise self.defer(
-                trigger=RabbitMQSensorTrigger(
-                    queue_name=self.queue_name,
-                    batch_size=self.batch_size,
-                    timeout=self.timeout,
-                ),
-                timeout=self.timeout,
-            )
         return messages
 
 
