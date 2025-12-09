@@ -15,7 +15,7 @@ def parse_message(body: bytes):
     return json.loads(decoded)  # parse JSON
 
 class RabbitMQSensorTrigger(BaseTrigger):
-    def __init__(self, queue_name: str, batch_size: int = 1, timeout: int = 60):
+    def __init__(self, queue_name: str, batch_size: int = 1, timeout: int = 300):
         self.queue_name = queue_name
         self.batch_size = batch_size
         self.timeout = timeout
