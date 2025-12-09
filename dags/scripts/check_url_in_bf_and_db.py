@@ -41,8 +41,10 @@ def check_url_in_bloom(url: str):
         return None
 
 if __name__ == "__main__":
-    url = input("enter the URL:").strip()
+    token = input("enter the token:").strip()
     
+    url = f"https://api.divar.ir/v8/posts-v2/web/{token}"
+
     # MongoDB check
     mongo_result = check_url_in_mongo(url)
     if mongo_result is True:
