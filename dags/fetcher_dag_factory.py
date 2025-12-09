@@ -1,53 +1,49 @@
+import importlib
 import os
 from datetime import datetime, timedelta
-import importlib
+
 import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from utils.config import config
+from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq_utils import RabbitMQSensor
 from websites.divar.divar_fetcher import fetcher_function
 from websites.divar.divar_transformer import transformer_function
-from utils.mongodb_utils import store_to_mongo
-from utils.config import config
 
 # Load YAML config
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 with open(CONFIG_PATH, "r") as f:
     yaml_config = yaml.safe_load(f)
 
+
 def load_function_with_path(path: str):
     module_path, func_name = path.rsplit(".", 1)
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
 
-def sensor_function(website_conf, **context):
-    """Waits for messages in RabbitMQ."""
-    return RabbitMQSensor(
-        task_id="sensor_task",
-        queue_name=website_conf["queue_name"],
-        batch_size=website_conf.get("batch_size", 50),
-        # host=RABBITMQ_HOST,
-        # port=RABBITMQ_PORT,
-        timeout=600,
-    )
 
 def extract_function(website_conf, **kwargs):
     messages = kwargs["ti"].xcom_pull(task_ids="sensor_task", key="return_value")
-    fetcher_func = load_function_with_path(website_conf["fetcher"])   
+    fetcher_func = load_function_with_path(website_conf["fetcher"])
     fetched = fetcher_func(messages)
     kwargs["ti"].xcom_push(key="fetched_data", value=fetched)
 
+
 def transform_function(website_conf, **kwargs):
     fetched = kwargs["ti"].xcom_pull(task_ids="fetch_task", key="fetched_data")
-    transformer_func = load_function_with_path(website_conf["transformer"])  
+    transformer_func = load_function_with_path(website_conf["transformer"])
     transformed = transformer_func(fetched)
     kwargs["ti"].xcom_push(key="transform_data", value=transformed)
 
+
 def load_function(website_conf, **kwargs):
-    transformed_data = kwargs["ti"].xcom_pull(key="transform_data", task_ids="transform_task")  
+    transformed_data = kwargs["ti"].xcom_pull(
+        key="transform_data", task_ids="transform_task"
+    )
     collection_name = f"{website_conf['name']}-{config.get('mongo_collection')}"
     store_to_mongo(transformed_data, collection_name=collection_name)
+
 
 def create_fetcher_dag(website_conf):
     dag_id = f"{website_conf['name']}_fetcher"
@@ -75,7 +71,7 @@ def create_fetcher_dag(website_conf):
     ) as dag:
 
         queue_name = f"{website_conf['name']}_{config.get('rabbitmq_urls_queue')}"
-        
+
         sensor_task = RabbitMQSensor(
             task_id="sensor_task",
             queue_name=queue_name,
@@ -107,6 +103,7 @@ def create_fetcher_dag(website_conf):
         sensor_task >> fetch_task >> transform_task >> load_task
 
     return dag
+
 
 # Register each website as its own DAG
 for website in yaml_config["websites"]:
