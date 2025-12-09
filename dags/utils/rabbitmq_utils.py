@@ -6,13 +6,13 @@ from aio_pika import Message, connect_robust
 from airflow.sensors.base import BaseSensorOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 from utils.config import config
+from aio_pika.exceptions import QueueEmpty
 
 logger = logging.getLogger(__name__)
 
 def parse_message(body: bytes):
     decoded = body.decode("utf-8")
-
-    return json.loads(decoded) # parse JSON
+    return json.loads(decoded)  # parse JSON
 
 class RabbitMQSensorTrigger(BaseTrigger):
     def __init__(self, queue_name: str, batch_size: int = 1, timeout: int = 60):
@@ -43,39 +43,42 @@ class RabbitMQSensorTrigger(BaseTrigger):
             )
             async with connection:
                 channel = await connection.channel()
-                queue = await channel.declare_queue(self.queue_name, passive=True)
+                queue = await channel.declare_queue(self.queue_name, durable=True)
 
-                async with queue.iterator() as queue_iter:
-                    async for message in queue_iter:
+                while (datetime.now() - start_time).total_seconds() < self.timeout:
+                    try:
+                        message = await asyncio.wait_for(
+                            queue.get(no_ack=False),
+                            timeout=5
+                        )
+                    except (asyncio.TimeoutError, QueueEmpty):
+                        continue
+
+                    if message:
                         async with message.process():
                             messages.append(parse_message(message.body))
-
+                        
                         if len(messages) >= self.batch_size:
                             yield TriggerEvent({"status": "success", "messages": messages})
                             return
-
-                        # timeout check
-                        elapsed = (datetime.now() - start_time).total_seconds()
-                        if elapsed >= self.timeout:
-                            yield TriggerEvent({"status": "timeout", "messages": messages})
-                            return
-
-                    # Check timeout
-                    elapsed = (datetime.now() - start_time).total_seconds()
-                    if elapsed >= self.timeout:
-                        logger.warning(
-                            f"Trigger: Timeout reached, returning {len(messages)} messages"
-                        )
-                        yield TriggerEvent({"status": "timeout", "messages": messages})
-                        return
-
-                    await asyncio.sleep(1)
+                    
+                # Timeout reached
+                if messages:
+                    logger.warning(f"Trigger: Timeout reached, returning {len(messages)} messages")
+                    yield TriggerEvent({"status": "timeout", "messages": messages})
+                else:
+                    logger.info("Trigger: Timeout reached, queue was empty")
+                    yield TriggerEvent({"status": "timeout", "messages": []})
+        
         except Exception as e:
-            logger.error(f"Trigger error: {e}")
-            yield TriggerEvent(
-                {"status": "error", "error": str(e), "messages": messages}
-            )
-
+            logger.error("Trigger failed to connect or declare queue", exc_info=True)
+            error_details = f"Real Connection Error: {repr(e)}"
+            yield TriggerEvent({
+                "status": "error",
+                "error": error_details,
+                "messages": messages or []
+            })
+        
 class RabbitMQSensor(BaseSensorOperator):
     def __init__(
         self,
@@ -90,7 +93,6 @@ class RabbitMQSensor(BaseSensorOperator):
         self.timeout_seconds = timeout
 
     def execute(self, context):
-        # ✅ always defer immediately
         self.log.info(f"Deferring sensor for queue: {self.queue_name}")
 
         self.defer(
@@ -111,15 +113,25 @@ class RabbitMQSensor(BaseSensorOperator):
         messages = event.get("messages", [])
 
         if status == "error":
-            raise RuntimeError(event.get("error"))
-
-        self.log.info(f"✅ Trigger returned {len(messages)} messages")
+            error_msg = event.get("error") or "Unknown trigger error"
+            raise RuntimeError(error_msg)
+        
+        if status == "success":
+            self.log.info(f"✅ Batch complete: Got {len(messages)} messages")
+            return messages
+        
+        if status == "timeout":
+            if messages:
+                self.log.info(f"⏳ Timeout but got {len(messages)} messages")
+                return messages
+            else:
+                self.log.info(f"⏳ Queue is empty, returning empty list")
+                return []
 
         return messages
 
-
+# Utility function to publish messages
 async def publish_messages(queue_name, messages):
-
     connection = await connect_robust(
         host=config["rabbitmq_host"],
         port=config["rabbitmq_port"],
@@ -131,12 +143,10 @@ async def publish_messages(queue_name, messages):
         queue = await channel.declare_queue(queue_name, durable=True)
 
         for message in messages:
-            token = message.get("content_url", "").split("/")[-1]
-
             await channel.default_exchange.publish(
                 Message(
                     body=json.dumps(message).encode(),
-                    delivery_mode=2,  
+                    delivery_mode=2,  # persistent
                 ),
                 routing_key=queue.name,
             )
