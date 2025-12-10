@@ -76,7 +76,9 @@ def extract_transform_urls():
             raise RuntimeError("Task failed because cookies could not be fetched")
 
         curl_data = json.loads(parsed_curl.get("data"))
-
+        
+        skipped_ads_total = 0
+        
         for page in range(max_pages):
             try:
                 # update pagination
@@ -103,9 +105,27 @@ def extract_transform_urls():
 
                 # Extract tokens
                 widgets = result.get("list_widgets", []) or []
+
+                skipped_ads = {"نردبان شده", "پله شده"}
+                
+                skipped_widgets = [
+                    w for w in widgets
+                    if w.get("data", {}).get("red_text") in skipped_ads]
+                
+                skipped_ads_total += len(skipped_widgets)
+
+                # normal ads
+                filtered_widgets = [
+                    w for w in widgets
+                    if w.get("data", {}).get("red_text") not in skipped_ads
+                ]
+
+                print(f"📊 Skipped ads : {len(skipped_widgets)}")
+                print(f"📊 Valid ads: {len(filtered_widgets)}")
+
                 tokens = [
                     w.get("data", {}).get("token")
-                    for w in widgets
+                    for w in filtered_widgets
                     if w.get("data", {}).get("token")
                 ]
                 if not tokens:
@@ -116,7 +136,7 @@ def extract_transform_urls():
                 #     print(f"🔹 Token found: {t}")
                 # print(f"📄 Page {page}: {result.get('list_widgets')[0].get('data').get('title')}")
 
-                print(f"📊 Number of ads: {len(widgets)}")
+                print(f"📊 Total ads: {len(widgets)}")
 
                 # Check for duplicate tokens
                 duplicate_count, new_tokens, duplicate_tokens = 0, [], []
@@ -131,7 +151,7 @@ def extract_transform_urls():
                         new_tokens.append(content_url)
 
                 ratio = duplicate_count / len(tokens) if tokens else 1
-                print(f"📊 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
+                print(f"📌 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
 
                 if ratio >= 0.5:
                     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
@@ -159,6 +179,8 @@ def extract_transform_urls():
             except Exception as e:
                 print(f"❌ Error requesting page {page}: {e}")
                 break
+            
+    print(f"📢 Total skipped ads in crawl: {skipped_ads_total}")
 
     print(f"✅ Extraction completed — {len(all_urls)} new urls extracted")
     return list(all_urls)
