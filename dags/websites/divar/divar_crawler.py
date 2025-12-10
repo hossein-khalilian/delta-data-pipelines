@@ -77,7 +77,7 @@ def extract_transform_urls():
 
         curl_data = json.loads(parsed_curl.get("data"))
         
-        skipped_ads_total = 0
+        pro_ads_total = 0
         
         for page in range(max_pages):
             try:
@@ -106,63 +106,117 @@ def extract_transform_urls():
                 # Extract tokens
                 widgets = result.get("list_widgets", []) or []
 
-                skipped_ads = {"نردبان شده", "پله شده"}
+                # pro_ads = {"نردبان شده", "پله شده"}
                 
-                skipped_widgets = [
-                    w for w in widgets
-                    if w.get("data", {}).get("red_text") in skipped_ads]
+                # pro_widgets = [
+                #     w for w in widgets
+                #     if w.get("data", {}).get("red_text") in pro_ads]
                 
-                skipped_ads_total += len(skipped_widgets)
+                # pro_ads_total += len(pro_widgets)
 
-                # normal ads
-                filtered_widgets = [
-                    w for w in widgets
-                    if w.get("data", {}).get("red_text") not in skipped_ads
-                ]
+                # # normal ads
+                # filtered_widgets = [
+                #     w for w in widgets
+                #     if w.get("data", {}).get("red_text") not in pro_ads
+                # ]
 
-                print(f"📊 Skipped ads : {len(skipped_widgets)}")
-                print(f"📊 Valid ads: {len(filtered_widgets)}")
+                # print(f"📊 pro ads : {len(pro_widgets)}")
+                # print(f"📊 Valid ads: {len(filtered_widgets)}")
 
-                tokens = [
+                # tokens = [
+                #     w.get("data", {}).get("token")
+                #     for w in filtered_widgets
+                #     if w.get("data", {}).get("token")
+                # ]
+                # if not tokens:
+                #     print(f"⛔️ Page {page}: No tokens found, stopping.")
+                #     break
+
+                # # for t in tokens:
+                # #     print(f"🔹 Token found: {t}")
+                # # print(f"📄 Page {page}: {result.get('list_widgets')[0].get('data').get('title')}")
+
+                # print(f"📊 Total ads: {len(widgets)}")
+
+                # # Check for duplicate tokens
+                # duplicate_count, new_tokens, duplicate_tokens = 0, [], []
+                # for token in tokens:
+                #     content_url = f"https://api.divar.ir/v8/posts-v2/web/{token}"
+
+                #     exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, content_url)
+                #     if exists:
+                #         duplicate_count += 1
+                #         duplicate_tokens.append(content_url)
+                #     else:
+                #         new_tokens.append(content_url)
+
+                # ratio = duplicate_count / len(tokens) if tokens else 1
+                # print(f"📌 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
+
+                # if ratio >= 0.5:
+                #     print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
+                #     stop_condition = True
+
+                # if not stop_condition:
+                #     all_urls_to_push = new_tokens + duplicate_tokens
+                # else:
+                #     all_urls_to_push = new_tokens
+
+                # new_urls = [{"content_url": url} for url in all_urls_to_push]
+                # all_urls.extend(new_urls)
+
+                # if stop_condition:
+                #     break
+                pro_ads = {"نردبان شده", "پله شده"}
+
+                # Split widgets
+                pro_widgets = [w for w in widgets if w.get("data", {}).get("red_text") in pro_ads]
+                normal_widgets = [w for w in widgets if w.get("data", {}).get("red_text") not in pro_ads]
+
+                pro_ads_total += len(pro_widgets)
+
+                print(f"📊 Pro ads : {len(pro_widgets)}")
+                print(f"📊 Normal ads: {len(normal_widgets)}")
+
+                # Extract tokens
+                pro_tokens = [
                     w.get("data", {}).get("token")
-                    for w in filtered_widgets
+                    for w in pro_widgets
                     if w.get("data", {}).get("token")
                 ]
-                if not tokens:
-                    print(f"⛔️ Page {page}: No tokens found, stopping.")
+
+                normal_tokens = [
+                    w.get("data", {}).get("token")
+                    for w in normal_widgets
+                    if w.get("data", {}).get("token")
+                ]
+
+                if not normal_tokens:
+                    print(f"⛔️ Page {page}: No normal tokens found, stopping.")
                     break
 
-                # for t in tokens:
-                #     print(f"🔹 Token found: {t}")
-                # print(f"📄 Page {page}: {result.get('list_widgets')[0].get('data').get('title')}")
+                # Build URLs
+                normal_urls = [f"https://api.divar.ir/v8/posts-v2/web/{t}" for t in normal_tokens]
+                pro_urls = [f"https://api.divar.ir/v8/posts-v2/web/{t}" for t in pro_tokens]
 
-                print(f"📊 Total ads: {len(widgets)}")
+                # Check duplicate ratio ONLY on normal URLs
+                duplicate_count = sum(
+                    rdb.execute_command("BF.EXISTS", BLOOM_KEY, url)
+                    for url in normal_urls
+                )
 
-                # Check for duplicate tokens
-                duplicate_count, new_tokens, duplicate_tokens = 0, [], []
-                for token in tokens:
-                    content_url = f"https://api.divar.ir/v8/posts-v2/web/{token}"
+                ratio = duplicate_count / len(normal_urls)
+                print(f"📌 {duplicate_count}/{len(normal_urls)} duplicates ({ratio:.0%})")
 
-                    exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, content_url)
-                    if exists:
-                        duplicate_count += 1
-                        duplicate_tokens.append(content_url)
-                    else:
-                        new_tokens.append(content_url)
-
-                ratio = duplicate_count / len(tokens) if tokens else 1
-                print(f"📌 {duplicate_count}/{len(tokens)} duplicates ({ratio:.0%})")
-
+                # Stop based on normal ads only
                 if ratio >= 0.5:
-                    print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
+                    print(f"🛑 More than 50% duplicates — stopping.")
                     stop_condition = True
 
-                if not stop_condition:
-                    all_urls_to_push = new_tokens + duplicate_tokens
-                else:
-                    all_urls_to_push = new_tokens
+                # All URLs must be pushed (normal + pro)
+                all_page_urls = normal_urls + pro_urls
 
-                new_urls = [{"content_url": url} for url in all_urls_to_push]
+                new_urls = [{"content_url": url} for url in all_page_urls]
                 all_urls.extend(new_urls)
 
                 if stop_condition:
@@ -180,7 +234,7 @@ def extract_transform_urls():
                 print(f"❌ Error requesting page {page}: {e}")
                 break
             
-    print(f"📢 Total skipped ads in crawl: {skipped_ads_total}")
+    print(f"📢 Total pro ads in crawl: {pro_ads_total}")
 
     print(f"✅ Extraction completed — {len(all_urls)} new urls extracted")
     return list(all_urls)
