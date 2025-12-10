@@ -15,20 +15,17 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 with open(CONFIG_PATH, "r") as f:
     yaml_config = yaml.safe_load(f)
 
-
 def load_function_with_path(path: str):
     """Dynamically import a parser function from a string path."""
     module_path, func_name = path.rsplit(".", 1)
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
 
-
 def extract_transform_function(website_conf, **kwargs):
     func_path = website_conf["crawler"]
     crawler_func = load_function_with_path(func_path)
     all_urls = crawler_func()
     kwargs["ti"].xcom_push(key="extracted_urls", value=all_urls)
-
 
 def load_function(website_conf, **kwargs):
     urls = kwargs["ti"].xcom_pull(
@@ -47,7 +44,6 @@ def load_function(website_conf, **kwargs):
 
     print(f"✅Sent {len(urls)} URLs to RabbitMQ queue: {queue_name}")
 
-
 def create_crawler_dag(website_conf):
     dag_id = f"{website_conf['name']}_crawler"
     schedule = website_conf.get("crawler_schedule")
@@ -57,7 +53,7 @@ def create_crawler_dag(website_conf):
         "depends_on_past": False,
         "email_on_failure": False,
         "email_on_retry": False,
-        "retries": 1,
+        "retries": 0,
         "retry_delay": timedelta(minutes=5),
     }
 
