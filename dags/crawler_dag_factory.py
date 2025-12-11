@@ -89,7 +89,6 @@ def create_crawler_dag(website_conf):
 
     return dag
 
-
 # Register each website as its own DAG
 for website in yaml_config["websites"]:
     dag_id = f"{website['name']}_crawler"
