@@ -1,7 +1,6 @@
 import asyncio
-
+import time
 import httpx
-
 
 def fetcher_function(messages):
     if not messages:
