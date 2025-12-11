@@ -1,7 +1,8 @@
-from pymongo import MongoClient
+import os
+
 import redis
-import os 
 from dotenv import load_dotenv
+from pymongo import MongoClient
 
 load_dotenv()
 
@@ -9,9 +10,9 @@ MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB")
 MONGO_COLLECTION = "divar-" + os.getenv("MONGO_COLLECTION")
 
-REDIS_HOST = os.getenv("REDIS_HOST")
-REDIS_PORT = os.getenv("REDIS_PORT")
+REDIS_URL = os.getenv("REDIS_URL")
 REDIS_BLOOM_FILTER = "divar_" + os.getenv("REDIS_BLOOM_FILTER")
+
 
 def check_url_in_mongo(url: str):
     try:
@@ -21,16 +22,17 @@ def check_url_in_mongo(url: str):
 
         result = collection.find_one({"content_url": url})
         return bool(result)
-    
+
     except Exception as e:
         print("⚠️ Error while connecting to MongoDB or searching:")
         print(e)
         return None
-    
+
+
 def check_url_in_bloom(url: str):
     try:
-        r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-        
+        r = redis.from_url(REDIS_URL, decode_responses=True)
+
         exists = r.execute_command("BF.EXISTS", REDIS_BLOOM_FILTER, url)
 
         return bool(exists)
@@ -40,9 +42,10 @@ def check_url_in_bloom(url: str):
         print(e)
         return None
 
+
 if __name__ == "__main__":
     token = input("enter the token:").strip()
-    
+
     url = f"https://api.divar.ir/v8/posts-v2/web/{token}"
 
     # MongoDB check
@@ -58,3 +61,4 @@ if __name__ == "__main__":
         print("Bloom Filter: ✅ Duplicate detected")
     elif bloom_result is False:
         print("Bloom Filter: ❌ Not a duplicate")
+

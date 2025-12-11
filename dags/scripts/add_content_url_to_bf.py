@@ -7,6 +7,7 @@ import redis
 import yaml
 from dotenv import load_dotenv
 from pymongo import MongoClient
+
 from utils.redis_utils import add_to_bloom_filter
 
 load_dotenv()
@@ -22,14 +23,14 @@ MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 
-REDIS_HOST = os.getenv("REDIS_HOST")
-REDIS_PORT = os.getenv("REDIS_PORT")
+REDIS_URL = os.getenv("REDIS_URL")
 REDIS_BLOOM_FILTER = os.getenv("REDIS_BLOOM_FILTER")
 
 websites_mongo_collection = [f"{name}-{MONGO_COLLECTION}" for name in site_names]
 websites_bloom_filter = [f"{name}_{REDIS_BLOOM_FILTER}" for name in site_names]
 
 BATCH_SIZE = 1000
+
 
 def ensure_bloom_exists(r, name):
     if r.exists(name) == 0:
@@ -44,7 +45,7 @@ async def process_collection_and_bloom(collection_name, bloom_name):
     mongo = MongoClient(MONGO_URI)
     collection = mongo[MONGO_DB][collection_name]
 
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
+    r = redis.from_url(REDIS_URL)
     ensure_bloom_exists(r, bloom_name)
 
     cursor = collection.find(
@@ -79,7 +80,9 @@ async def process_collection_and_bloom(collection_name, bloom_name):
 
 
 async def main():
-    for mongo_col, bloom_filter in zip(websites_mongo_collection, websites_bloom_filter):
+    for mongo_col, bloom_filter in zip(
+        websites_mongo_collection, websites_bloom_filter
+    ):
         await process_collection_and_bloom(mongo_col, bloom_filter)
 
 

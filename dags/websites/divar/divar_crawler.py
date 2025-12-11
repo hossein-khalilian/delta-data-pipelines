@@ -1,16 +1,19 @@
 import asyncio
 import json
 import time
+
 import httpx
 import redis
 from curl2json.parser import parse_curl
+
 from utils.config import config
+
 
 # ETL for crawler DAG
 def extract_transform_urls():
     BLOOM_KEY = f"divar_{config.get('redis_bloom_filter')}"
 
-    rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
+    rdb = redis.from_url(config["redis_url"])
 
     # Bloom filter
     if not rdb.exists(BLOOM_KEY):

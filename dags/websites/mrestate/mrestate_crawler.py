@@ -1,16 +1,21 @@
+import json
 import time
+from urllib.parse import parse_qs, urlencode, urlparse
+
 import httpx
 import redis
+from bs4 import BeautifulSoup
 from curl2json.parser import parse_curl
-from urllib.parse import urlparse, urlencode, parse_qs 
+
 from utils.config import config
-import json
-from bs4 import BeautifulSoup 
+
 
 def extract_build_id(client):
     curl_file = "extract_buildid.txt"
     try:
-        with open(f"./dags/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8") as f:
+        with open(
+            f"./dags/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8"
+        ) as f:
             curl_cmd = f.read()
     except Exception as e:
         print(f"Cannot read {curl_file}: {e}")
@@ -27,7 +32,7 @@ def extract_build_id(client):
             print(f"Failed to fetch main page: HTTP {resp.status_code}")
             return None
 
-        html = resp.content.decode('utf-8') 
+        html = resp.content.decode("utf-8")
         soup = BeautifulSoup(html, "html.parser")
         next_data_script = soup.find("script", id="__NEXT_DATA__")
 
@@ -45,14 +50,17 @@ def extract_build_id(client):
         print(f"Error extracting buildId: {e}")
     return None
 
+
 def extract_transform_urls(website_conf=None):
     BLOOM_KEY = f"mrestate_{config.get('redis_bloom_filter')}"
 
-    rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
+    rdb = redis.from_url(config["redis_url"])
 
     if not rdb.exists(BLOOM_KEY):
         try:
-            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.01, 1_000_000, "EXPANSION", 2)
+            rdb.execute_command(
+                "BF.RESERVE", BLOOM_KEY, 0.01, 1_000_000, "EXPANSION", 2
+            )
             print(f"✅ Bloom filter '{BLOOM_KEY}' created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
@@ -67,7 +75,7 @@ def extract_transform_urls(website_conf=None):
     all_urls = []
     total_new = 0
 
-    with httpx.Client(timeout=30.0) as client: 
+    with httpx.Client(timeout=30.0) as client:
         build_id = extract_build_id(client)
 
         for mode_name, curl_file, mode_value in modes:
@@ -83,19 +91,23 @@ def extract_transform_urls(website_conf=None):
             except Exception as e:
                 print(f"❌ Error reading file curl_command_01.txt: {e}")
                 return
-    
-            curl_cmd = curl_template.replace("{{mode}}", mode_value).replace("{{build_id}}", build_id)           
-             
+
+            curl_cmd = curl_template.replace("{{mode}}", mode_value).replace(
+                "{{build_id}}", build_id
+            )
+
             parsed = parse_curl(curl_cmd)
             base_url_template = parsed["url"]
             headers = parsed.get("headers", {})
             client.headers.update(headers)
-            
-            client.headers.update({
-                "accept-encoding": "gzip, deflate, br",
-                "priority": "u=1, i",
-                "sec-fetch-user": "?1"
-            })
+
+            client.headers.update(
+                {
+                    "accept-encoding": "gzip, deflate, br",
+                    "priority": "u=1, i",
+                    "sec-fetch-user": "?1",
+                }
+            )
             page = 1
             stop = False
             new_count = 0
@@ -113,7 +125,7 @@ def extract_transform_urls(website_conf=None):
 
                 new_query = urlencode(query_params, doseq=True)
                 current_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{new_query}"
-                
+
                 print(f" =========== Page: {page} =========== ")
 
                 try:
@@ -142,10 +154,10 @@ def extract_transform_urls(website_conf=None):
                         u_id = item.get("u_id_file")
                         if not u_id:
                             continue
-                                                
+
                         api_url = f"https://mrestate.ir/_next/data/{build_id}/s/{u_id}.json?post={u_id}"
                         exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, api_url)
-                        
+
                         if exists:
                             page_dup += 1
                             dup_count += 1
@@ -163,10 +175,10 @@ def extract_transform_urls(website_conf=None):
                     if ratio >= 0.30:
                         print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
                         stop = True
-                        break 
+                        break
                     page += 1
                     time.sleep(1.5)
-                    
+
                 except Exception as e:
                     print(f"Error on page {page}: {e}")
                     break
@@ -176,3 +188,4 @@ def extract_transform_urls(website_conf=None):
 
     print(f"✅ Extraction completed — {total_new} new urls extracted(buy + rent)")
     return all_urls
+

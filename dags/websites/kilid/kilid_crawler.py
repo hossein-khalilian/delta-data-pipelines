@@ -1,11 +1,14 @@
 import json
 import time
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from xml.etree import ElementTree as ET
+
 import httpx
 import redis
 from curl2json.parser import parse_curl
+
 from utils.config import config
-from xml.etree import ElementTree as ET
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
 
 def xml_to_json_bytesafe(xml_bytes):
     root = ET.fromstring(xml_bytes)
@@ -16,7 +19,7 @@ def xml_to_json_bytesafe(xml_bytes):
         listing_type_elem = elem.find("listingType")
         property_type_elem = elem.find("propertyType")
         landuse_type_elem = elem.find("landuseType")
-        
+
         if id_elem is not None and id_elem.text:
             item = {"id": id_elem.text}
             if listing_type_elem is not None:
@@ -27,21 +30,18 @@ def xml_to_json_bytesafe(xml_bytes):
                 item["landuseType"] = landuse_type_elem.text
             items.append(item)
 
-    return {
-        "data": {
-            "result": {
-                "result": items
-            }
-        }
-    }
+    return {"data": {"result": {"result": items}}}
+
 
 def extract_transform_urls():
     BLOOM_KEY = f"kilid_{config.get('redis_bloom_filter')}"
-    rdb = redis.Redis(host=config["redis_host"], port=config["redis_port"])
+    rdb = redis.from_url(config["redis_url"])
 
     if not rdb.exists(BLOOM_KEY):
         try:
-            rdb.execute_command("BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2)
+            rdb.execute_command(
+                "BF.RESERVE", BLOOM_KEY, 0.05, 1_000_000, "EXPANSION", 2
+            )
             print(f"✅ Bloom filter '{BLOOM_KEY}' created")
         except Exception as e:
             print(f"⚠️ Error while creating Bloom filter: {e}")
@@ -50,7 +50,11 @@ def extract_transform_urls():
 
     # curl command
     try:
-        with open("./dags/websites/kilid/curl_commands/kilid_curl_command.txt", "r", encoding="utf-8") as file:
+        with open(
+            "./dags/websites/kilid/curl_commands/kilid_curl_command.txt",
+            "r",
+            encoding="utf-8",
+        ) as file:
             curl_command_template = file.read()
     except Exception as e:
         print(f"❌ Error reading kilid_curl_command.txt: {e}")
@@ -58,8 +62,8 @@ def extract_transform_urls():
 
     parsed_curl_template = parse_curl(curl_command_template)
     parsed_curl_template.pop("cookies", None)
-    
-    # CITY + TYPE 
+
+    # CITY + TYPE
     CITY_MAP = {
         "tehran": "272905",
         "karaj": "273014",
@@ -76,7 +80,11 @@ def extract_transform_urls():
 
     # Load first request for cookies
     try:
-        with open("./dags/websites/kilid/curl_commands/first_request.txt", "r", encoding="utf-8") as file:
+        with open(
+            "./dags/websites/kilid/curl_commands/first_request.txt",
+            "r",
+            encoding="utf-8",
+        ) as file:
             first_request_curl = file.read().replace("\\", "")
     except Exception as e:
         print(f"❌ Error reading first_request.txt: {e}")
@@ -105,7 +113,7 @@ def extract_transform_urls():
 
         for listing_type, city_list in modes:
             print(f"⚪ STARTING TYPE → {listing_type}")
-            
+
             for city_key in city_list:
 
                 # Parse curl once, without template replace
@@ -140,14 +148,16 @@ def extract_transform_urls():
 
                     new_query = urlencode(query_params, doseq=True)
 
-                    current_url = urlunparse((
-                        parsed_url.scheme,
-                        parsed_url.netloc,
-                        parsed_url.path,
-                        "",
-                        new_query,
-                        ""
-                    ))
+                    current_url = urlunparse(
+                        (
+                            parsed_url.scheme,
+                            parsed_url.netloc,
+                            parsed_url.path,
+                            "",
+                            new_query,
+                            "",
+                        )
+                    )
 
                     print(f" ========== Page: {page} | {city_key} ========== ")
 
@@ -159,16 +169,16 @@ def extract_transform_urls():
                             timeout=30.0,
                         )
                         response.raise_for_status()
-                        
+
                         raw = response.content
-                        
+
                         # -------------------------
                         # if not raw:
                         #     print(f"⚠️ Page {page}: empty")
                         #     break
                         # print(f"📄 RAW RESPONSE SAMPLE (Page {page}): {response.text[:300]}...")
                         # -------------------------
-                        
+
                         try:
                             result = json.loads(response.text)
                             if isinstance(result, list):
@@ -176,7 +186,9 @@ def extract_transform_urls():
                             elif isinstance(result, dict):
                                 widgets = result.get("data", {}).get("result", [])
                                 if not isinstance(widgets, list):
-                                    print(f"⚠️ Unexpected JSON structure: widgets is {type(widgets)}")
+                                    print(
+                                        f"⚠️ Unexpected JSON structure: widgets is {type(widgets)}"
+                                    )
                                     widgets = []
                             else:
                                 widgets = []
@@ -187,13 +199,17 @@ def extract_transform_urls():
                                 xml_converted = xml_to_json_bytesafe(raw)
                                 widgets = xml_converted["data"]["result"]["result"]
                                 count = len(widgets)
-                                print(f"✅ Page {page}: XML converted → JSON ({count} ids)")
+                                print(
+                                    f"✅ Page {page}: XML converted → JSON ({count} ids)"
+                                )
                             except ET.ParseError as parse_err:
                                 print(f"❌ XML Parse Error on page {page}: {parse_err}")
                                 widgets = []
 
                         if not widgets:
-                            print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
+                            print(
+                                f"🛑 Page {page}: More than 30% duplicates — stopping."
+                            )
                             break
 
                         page_new = 0
@@ -205,7 +221,9 @@ def extract_transform_urls():
                                 continue
                             detail_url = f"https://kilid.com/detail/{id_val}"
 
-                            exists = rdb.execute_command("BF.EXISTS", BLOOM_KEY, detail_url)
+                            exists = rdb.execute_command(
+                                "BF.EXISTS", BLOOM_KEY, detail_url
+                            )
                             if exists:
                                 page_dup += 1
                                 dup_count += 1
@@ -213,19 +231,23 @@ def extract_transform_urls():
 
                             page_new += 1
                             new_count += 1
-                            all_urls.append({
-                                "content_url": detail_url,
-                                "listingType": w.get("listingType"),
-                                "propertyType": w.get("propertyType"),
-                                "landuseType": w.get("landuseType")
-                            })
+                            all_urls.append(
+                                {
+                                    "content_url": detail_url,
+                                    "listingType": w.get("listingType"),
+                                    "propertyType": w.get("propertyType"),
+                                    "landuseType": w.get("landuseType"),
+                                }
+                            )
 
                         ratio = page_dup / len(widgets) if len(widgets) > 0 else 0
                         print(f"📊 Number of ads: {len(widgets)}")
                         print(f"📊 {page_dup}/{len(widgets)} duplicates ({ratio:.0%})")
 
                         if ratio >= 0.30:
-                            print(f"🛑 Page {page}: More than 30% duplicates — stopping.")
+                            print(
+                                f"🛑 Page {page}: More than 30% duplicates — stopping."
+                            )
                             stop = True
                             break
 
@@ -233,16 +255,22 @@ def extract_transform_urls():
                         time.sleep(5)
 
                     except Exception as e:
-                        print(f"❌ Error on page {page} for {city_key}/{listing_type}: {e}")
+                        print(
+                            f"❌ Error on page {page} for {city_key}/{listing_type}: {e}"
+                        )
                         break
 
-                print(f"{city_key} / {listing_type} finished → {new_count} new urls extracted")
+                print(
+                    f"{city_key} / {listing_type} finished → {new_count} new urls extracted"
+                )
 
                 total_extracted += new_count
                 time.sleep(5)
-                
+
             time.sleep(5)
 
-
-        print(f"✅ Extraction completed — {total_extracted} new urls extracted (all modes)")
+        print(
+            f"✅ Extraction completed — {total_extracted} new urls extracted (all modes)"
+        )
         return all_urls
+
