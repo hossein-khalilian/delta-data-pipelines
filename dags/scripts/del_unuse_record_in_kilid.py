@@ -7,7 +7,7 @@ load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB")
-MONGO_COLLECTION = "kilid-dataset_1"
+MONGO_COLLECTION = "kilid-dataset"
 
 threshold_str = "2025-12-04T21:04:19.181+00:00"
 threshold = datetime.fromisoformat(threshold_str.replace("Z", "+00:00"))
