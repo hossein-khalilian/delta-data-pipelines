@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+
 from utils.config import config
 from utils.mongodb_utils import store_to_mongo
 from utils.rabbitmq_utils import RabbitMQSensor
@@ -29,7 +30,7 @@ def extract_function(website_conf, **kwargs):
 
 
 def transform_function(website_conf, **kwargs):
-    fetched = kwargs["ti"].xcom_pull(task_ids="fetch_task", key="fetched_data")
+    fetched = kwargs["ti"].xcom_pull(task_ids="extract_task", key="fetched_data")
     transformer_func = load_function_with_path(website_conf["transformer"])
     transformed = transformer_func(fetched)
     kwargs["ti"].xcom_push(key="transform_data", value=transformed)
@@ -77,8 +78,8 @@ def create_fetcher_dag(website_conf):
             timeout=60,
         )
 
-        fetch_task = PythonOperator(
-            task_id="fetch_task",
+        extract_task = PythonOperator(
+            task_id="extract_task",
             python_callable=extract_function,
             provide_context=True,
             op_kwargs={"website_conf": website_conf},
@@ -98,7 +99,7 @@ def create_fetcher_dag(website_conf):
             op_kwargs={"website_conf": website_conf},
         )
 
-        sensor_task >> fetch_task >> transform_task >> load_task
+        sensor_task >> extract_task >> transform_task >> load_task
 
     return dag
 
