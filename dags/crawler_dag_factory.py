@@ -34,15 +34,25 @@ def load_function(website_conf, **kwargs):
     queue_name = f"{website_conf.get('name')}_{config.get('rabbitmq_urls_queue')}"
     bloom_key = f"{website_conf.get('name')}_{config.get('redis_bloom_filter')}"
 
-    asyncio.run(publish_messages(queue_name, urls))
-
     content_urls = [url.get("content_url") for url in urls]
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(add_to_bloom_filter(bloom_key, content_urls))
-    asyncio.run(check_bloom(bloom_key, content_urls))
-    asyncio.run(add_to_bloom_filter(bloom_key, content_urls))
+    new_items, duplicate_items = asyncio.run(check_bloom(bloom_key, content_urls))
+    new_urls = [{"content_url": url} for url in new_items]
 
-    print(f"✅Sent {len(urls)} URLs to RabbitMQ queue: {queue_name}")
+    total = len(content_urls)
+    duplicate_count = len(duplicate_items)
+    new_count = len(new_items)
+
+    duplicate_percent = (duplicate_count / total) * 100 if total > 0 else 0
+
+    asyncio.run(publish_messages(queue_name, new_urls))
+    asyncio.run(check_bloom(bloom_key, content_urls))
+    asyncio.run(add_to_bloom_filter(bloom_key, new_items))
+
+    print(f"New count: {new_count}")
+    print(f"Duplicate count: {duplicate_count}")
+    print(f"Duplicate percentage: {duplicate_percent:.2f}%")
+    
+    print(f"✅Sent {len(new_urls)} URLs to RabbitMQ queue: {queue_name}")
 
 def create_crawler_dag(website_conf):
     dag_id = f"{website_conf['name']}_crawler"
