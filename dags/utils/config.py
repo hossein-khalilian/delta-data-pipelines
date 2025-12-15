@@ -16,6 +16,12 @@ ENV_VARS = [
     "RABBITMQ_USER",
     "RABBITMQ_PASS",
     "RABBITMQ_URLS_QUEUE",
+    "SQL_HOST",
+    "SQL_PORT",
+    "SQL_NAME",
+    "SQL_USER",
+    "SQL_PASSWORD",
+
 ]
 
 config = {var.lower(): os.getenv(var) for var in ENV_VARS}

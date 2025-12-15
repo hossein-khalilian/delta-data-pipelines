@@ -1,5 +1,9 @@
 import pymssql
 import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def get_deposit_by_id(deposit_id: int, conn_params: dict):
     query = """
@@ -86,11 +90,11 @@ def get_deposit_by_id(deposit_id: int, conn_params: dict):
 
 if __name__ == "__main__":
     db_config = {
-        "server": "",
-        "port": ,
-        "database": "",
-        "user": "",
-        "password": ""
+        "server": os.getenv("SQL_HOST"),
+        "port": os.getenv("SQL_PORT"),
+        "database": os.getenv("SQL_NAME"),
+        "user": os.getenv("SQL_USER"),
+        "password": os.getenv("SQL_PASSWORD"),
     }
 
     deposit_id = 87115
