@@ -21,6 +21,7 @@ ENV_VARS = [
     "SQL_NAME",
     "SQL_USER",
     "SQL_PASSWORD",
+    "SEARCH_ENDPOINT_URL",
 
 ]
 

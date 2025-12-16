@@ -28,15 +28,22 @@ def get_deposit_by_id(deposit_id: int, conn_params: dict):
     PivotCustomFields AS (
         SELECT
             cfv.DepositId,
-            MAX(CASE WHEN cfv.CustomFieldId IN (1117,1125,1133,1141,1149,1155,1158,1159,1174)
-                     THEN ISNULL(cfv.Value, cfo.Value) END) AS meter,
-            MAX(CASE WHEN cfv.CustomFieldId = 1118 THEN ISNULL(cfv.Value, cfo.Value) END) AS floor,
-            MAX(CASE WHEN cfv.CustomFieldId = 1119 THEN ISNULL(cfv.Value, cfo.Value) END) AS rooms,
-            MAX(CASE WHEN cfv.CustomFieldId = 1120 THEN ISNULL(cfv.Value, cfo.Value) END) AS age,
-            MAX(CASE WHEN cfv.CustomFieldId = 1121 THEN ISNULL(cfv.Value, cfo.Value) END) AS parking,
-            MAX(CASE WHEN cfv.CustomFieldId = 1122 THEN ISNULL(cfv.Value, cfo.Value) END) AS warehouse,
-            MAX(CASE WHEN cfv.CustomFieldId = 1123 THEN ISNULL(cfv.Value, cfo.Value) END) AS elevator,
-            MAX(CASE WHEN cfv.CustomFieldId = 1124 THEN ISNULL(cfv.Value, cfo.Value) END) AS loan
+            MAX(CASE WHEN cfv.CustomFieldId IN (1224, 1225, 1226, 1227, 1228, 1229, 1230, 1231, 1232, 1233, 1234, 1235, 1236, 1237, 1238, 1239, 1240, 1241, 1242, 1243, 1200, 1167, 1159, 1117, 1125, 1133, 1174, 1181,1162, 1150, 1141, 1203, 1261, 1196, 1188, 1199, 1195, 1260, 1202, 1244, 1245, 1149, 1155, 1158, 1163, 1161)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS meter,
+            MAX(CASE WHEN cfv.CustomFieldId In (1189, 1142, 1126, 1118, 1134, 1175, 1182, 1168)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS floor,
+            MAX(CASE WHEN cfv.CustomFieldId In (1143, 1135, 1127, 1119, 1176, 1169, 1166, 1151, 1197, 1183, 1190, 1262)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS rooms,
+            MAX(CASE WHEN cfv.CustomFieldId In (1136, 1152, 1184, 1191, 1198, 1263, 1170, 1177, 1144, 1120, 1128)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS age,
+            MAX(CASE WHEN cfv.CustomFieldId In (1185, 1192, 1171, 1178, 1121, 1129, 1137, 1145)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS parking,
+            MAX(CASE WHEN cfv.CustomFieldId In (1193, 1186, 1179, 1172, 1146, 1138, 1130, 1122)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS warehouse,
+            MAX(CASE WHEN cfv.CustomFieldId IN (1123, 1131, 1139, 1147, 1173, 1180, 1187, 1194)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS elevator,
+            MAX(CASE WHEN cfv.CustomFieldId In (1148, 1140, 1132, 1124)
+            THEN COALESCE(cfv.Value, cfo.Value) END) AS loan
         FROM CustomFieldValues cfv
         LEFT JOIN CustomFieldOptions cfo ON cfv.CustomFieldOptionId = cfo.Id
         GROUP BY cfv.DepositId
@@ -69,7 +76,7 @@ def get_deposit_by_id(deposit_id: int, conn_params: dict):
     try:
         conn = pymssql.connect(
             server=conn_params['server'],
-            port=conn_params.get('port', 1433),
+            port=conn_params.get['port'],
             user=conn_params['user'],
             password=conn_params['password'],
             database=conn_params['database']
