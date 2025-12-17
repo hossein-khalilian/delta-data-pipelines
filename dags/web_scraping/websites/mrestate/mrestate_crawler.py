@@ -14,7 +14,7 @@ def extract_build_id(client):
     curl_file = "extract_buildid.txt"
     try:
         with open(
-            f"./dags/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8"
+            f"./dags/web_scraping/websites/mrestate/curl_commands/{curl_file}", "r", encoding="utf-8"
         ) as f:
             curl_cmd = f.read()
     except Exception as e:
@@ -83,7 +83,7 @@ def extract_transform_urls(website_conf=None):
 
             try:
                 with open(
-                    f"./dags/websites/mrestate/curl_commands/{curl_file}",
+                    f"./dags/web_scraping/websites/mrestate/curl_commands/{curl_file}",
                     "r",
                     encoding="utf-8",
                 ) as file:

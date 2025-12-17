@@ -1,0 +1,33 @@
+# websites.yaml
+websites:
+  - name: divar
+    url: "https://divar.ir"
+    crawler_schedule: "*/5 * * * *"
+    fetcher_schedule: "*/2 * * * *"
+    crawler: "web_scraping.websites.divar.divar_crawler.extract_transform_urls"
+    fetcher: "web_scraping.websites.divar.divar_fetcher.fetcher_function"
+    transformer: "web_scraping.websites.divar.divar_transformer.transformer_function"
+
+  - name: sheypoor
+    url: "https://www.sheypoor.com/"
+    crawler_schedule: "*/15 * * * *"
+    fetcher_schedule: "*/10 * * * *"
+    crawler: "web_scraping.websites.sheypoor.sheypoor_crawler.extract_transform_urls"
+    fetcher: "web_scraping.websites.sheypoor.sheypoor_fetcher.fetcher_function"
+    transformer: "web_scraping.websites.sheypoor.sheypoor_transformer.transformer_function"
+
+  - name: mrestate
+    url: "https://mrestate.ir/"
+    crawler_schedule: "*/10 * * * *"
+    fetcher_schedule: "*/5 * * * *"
+    crawler: "web_scraping.websites.mrestate.mrestate_crawler.extract_transform_urls"
+    fetcher: "web_scraping.websites.mrestate.mrestate_fetcher.fetcher_function"
+    transformer: "web_scraping.websites.mrestate.mrestate_transformer.transformer_function"
+    
+  - name: kilid
+    url: "https://kilid.com/"
+    crawler_schedule: "*/10 * * * *"
+    fetcher_schedule: "*/5 * * * *"
+    crawler: "web_scraping.websites.kilid.kilid_crawler.extract_transform_urls"
+    fetcher: "web_scraping.websites.kilid.kilid_fetcher.fetcher_function"
+    transformer: "web_scraping.websites.kilid.kilid_transformer.transformer_function"

@@ -51,7 +51,7 @@ def extract_transform_urls():
     # curl command
     try:
         with open(
-            "./dags/websites/kilid/curl_commands/kilid_curl_command.txt",
+            "./dags/web_scraping/websites/kilid/curl_commands/kilid_curl_command.txt",
             "r",
             encoding="utf-8",
         ) as file:
@@ -81,7 +81,7 @@ def extract_transform_urls():
     # Load first request for cookies
     try:
         with open(
-            "./dags/websites/kilid/curl_commands/first_request.txt",
+            "./dags/web_scraping/websites/kilid/curl_commands/first_request.txt",
             "r",
             encoding="utf-8",
         ) as file:

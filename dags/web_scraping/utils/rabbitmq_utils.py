@@ -31,7 +31,7 @@ class RabbitMQSensorTrigger(BaseTrigger):
 
     def serialize(self):
         return (
-            "utils.rabbitmq_utils.RabbitMQSensorTrigger",
+            "web_scraping.utils.rabbitmq_utils.RabbitMQSensorTrigger",
             {
                 "queue_name": self.queue_name,
                 "batch_size": self.batch_size,

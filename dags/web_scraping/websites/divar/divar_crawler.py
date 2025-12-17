@@ -1,4 +1,3 @@
-import asyncio
 import json
 import time
 
@@ -30,7 +29,7 @@ def extract_transform_urls():
     # curl_command
     try:
         with open(
-            "./dags/websites/divar/curl_commands/curl_command_01.txt",
+            "./dags/web_scraping/websites/divar/curl_commands/curl_command_01.txt",
             "r",
             encoding="utf-8",
         ) as file:
@@ -44,7 +43,7 @@ def extract_transform_urls():
 
     try:
         with open(
-            "./dags/websites/divar/curl_commands/first_request.txt",
+            "./dags/web_scraping/websites/divar/curl_commands/first_request.txt",
             "r",
             encoding="utf-8",
         ) as file:

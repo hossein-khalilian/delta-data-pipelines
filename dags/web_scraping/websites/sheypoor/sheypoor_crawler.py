@@ -30,7 +30,7 @@ def extract_transform_urls(**kwargs):
     # curl command
     try:
         with open(
-            "./dags/websites/sheypoor/curl_commands/sheypoor_curl_command.txt",
+            "./dags/web_scraping/websites/sheypoor/curl_commands/sheypoor_curl_command.txt",
             "r",
             encoding="utf-8",
         ) as file:

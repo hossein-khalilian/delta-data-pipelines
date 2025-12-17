@@ -4,7 +4,6 @@ from datetime import datetime
 from dateutil import parser
 from dotenv import load_dotenv
 from pymongo import MongoClient, UpdateOne
-from pymongo.errors import DuplicateKeyError
 
 load_dotenv()
 
@@ -124,7 +123,6 @@ errors = 0
 
 cursor = collection.find({}, no_cursor_timeout=True)
 for doc in cursor:
-    # اگر content_url از قبل موجود است، رد می‌کنیم
     if "content_url" in doc and doc["content_url"]:
         skipped += 1
         continue
@@ -136,7 +134,6 @@ for doc in cursor:
 
     new_content_url = BASE_URL.format(token=token)
     
-    # بررسی وجود URL در دیتابیس
     if collection.find_one({"content_url": new_content_url}):
         skipped += 1
         continue
@@ -152,7 +149,6 @@ for doc in cursor:
         result = collection.bulk_write(operations, ordered=False)
         updated += result.modified_count
         operations = []
-
 
 
 # Write remaining operations

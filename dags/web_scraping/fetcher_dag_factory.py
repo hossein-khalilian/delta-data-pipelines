@@ -7,8 +7,8 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 
 from utils.config import config
-from utils.mongodb_utils import store_to_mongo
-from utils.rabbitmq_utils import RabbitMQSensor
+from web_scraping.utils.mongodb_utils import store_to_mongo
+from web_scraping.utils.rabbitmq_utils import RabbitMQSensor
 
 # Load YAML config
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")

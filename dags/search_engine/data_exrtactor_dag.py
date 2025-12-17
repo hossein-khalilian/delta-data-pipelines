@@ -217,10 +217,6 @@ with DAG(
     schedule_interval="@hourly",
     catchup=False,
     max_active_runs=1,
-    default_args={
-        "retries": 3,
-        "retry_delay": 300,
-    },
     tags=["extract data from database"],
 ) as dag:
 

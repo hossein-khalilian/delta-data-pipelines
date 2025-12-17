@@ -8,7 +8,7 @@ import yaml
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-from utils.redis_utils import add_to_bloom_filter
+from web_scraping.utils.redis_utils import add_to_bloom_filter 
 
 load_dotenv()
 
@@ -30,7 +30,6 @@ websites_mongo_collection = [f"{name}-{MONGO_COLLECTION}" for name in site_names
 websites_bloom_filter = [f"{name}_{REDIS_BLOOM_FILTER}" for name in site_names]
 
 BATCH_SIZE = 1000
-
 
 def ensure_bloom_exists(r, name):
     if r.exists(name) == 0:

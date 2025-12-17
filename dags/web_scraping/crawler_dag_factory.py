@@ -7,8 +7,8 @@ import yaml
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from utils.config import config
-from utils.rabbitmq_utils import publish_messages
-from utils.redis_utils import add_to_bloom_filter, check_bloom
+from web_scraping.utils.rabbitmq_utils import publish_messages
+from web_scraping.utils.redis_utils import add_to_bloom_filter, check_bloom
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
 
