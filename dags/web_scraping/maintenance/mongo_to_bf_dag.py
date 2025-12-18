@@ -91,10 +91,10 @@ default_args = {
 }
 
 dag = DAG(
-    dag_id="add_urls_to_BF",
+    dag_id="add-urls-to-BF",
     default_args=default_args,
-    description="add MongoDB URLs into BF",
-    schedule_interval="@hourly",
+    description="add MongoDB URLs to BF",
+    schedule_interval="@daily",
     catchup=False,
     max_active_runs=1,
 )

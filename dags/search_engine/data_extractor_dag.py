@@ -4,7 +4,8 @@ from airflow.models import Variable
 import json
 from decimal import Decimal
 
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta, timezone
+import pytz
 import pymssql
 import requests
 import logging
@@ -35,83 +36,78 @@ DB_CONFIG = {
 # query
 QUERY = """
 WITH FilteredDeposits AS (
-    SELECT
-        d.Id,
-        d.Title,
-        d.Description,
-        d.DepositCategoryId,
-        d.PropertyTypeId,
-        d.StatusId,
-        d.CityId,
-        d.RegionId,
-        d.CreatedTime,
-        d.ModifiedDate,
-        d.MainStreet,
-        d.Price,
-        d.RentalPrice
-    FROM Deposits d
-    WHERE
-        d.StatusId = 1247
-        AND (
-            d.CreatedTime >= %s
-            OR d.ModifiedDate >= %s
-        )
+SELECT
+d.Id,
+d.Title,
+d.Description,
+d.DepositCategoryId,
+d.PropertyTypeId,
+d.StatusId,
+d.CityId,
+d.RegionId,
+d.ModifiedDate,
+d.MainStreet,
+d.Price,
+d.RentalPrice
+FROM Deposits d
+WHERE d.StatusId <> 1254
+	AND d.ModifiedDate > '2025-06-17 11:30:00.000'
 ),
 PivotCustomFields AS (
-    SELECT
-        cfv.DepositId,
-        MAX(CASE WHEN cfv.CustomFieldId IN (
-            1224,1225,1226,1227,1228,1229,1230,1231,1232,1233,1234,
-            1235,1236,1237,1238,1239,1240,1241,1242,1243,1200,1167,
-            1159,1117,1125,1133,1174,1181,1162,1150,1141,1203,1261,
-            1196,1188,1199,1195,1260,1202,1244,1245,1149,1155,1158,
-            1163,1161
-        ) THEN COALESCE(cfv.Value, cfo.Value) END) AS meter,
-        MAX(CASE WHEN cfv.CustomFieldId IN (1189,1142,1126,1118,1134,1175,1182,1168)
-            THEN COALESCE(cfv.Value, cfo.Value) END) AS floor,
-        MAX(CASE WHEN cfv.CustomFieldId IN (1143,1135,1127,1119,1176,1169,1166,1151,1197,1183,1190,1262)
-            THEN COALESCE(cfv.Value, cfo.Value) END) AS rooms,
-        MAX(CASE WHEN cfv.CustomFieldId IN (1136,1152,1184,1191,1198,1263,1170,1177,1144,1120,1128)
-            THEN COALESCE(cfv.Value, cfo.Value) END) AS age,
-        MAX(CASE WHEN cfv.CustomFieldId IN (1185,1192,1171,1178,1121,1129,1137,1145)
-            THEN COALESCE(cfv.Value, cfo.Value) END) AS parking,
-        MAX(CASE WHEN cfv.CustomFieldId IN (1193,1186,1179,1172,1146,1138,1130,1122)
-            THEN COALESCE(cfv.Value, cfo.Value) END) AS warehouse,
-        MAX(CASE WHEN cfv.CustomFieldId IN (1123,1131,1139,1147,1173,1180,1187,1194)
-            THEN COALESCE(cfv.Value, cfo.Value) END) AS elevator,
-        MAX(CASE WHEN cfv.CustomFieldId IN (1148,1140,1132,1124)
-            THEN COALESCE(cfv.Value, cfo.Value) END) AS loan
-    FROM CustomFieldValues cfv
-    LEFT JOIN CustomFieldOptions cfo
-        ON cfv.CustomFieldOptionId = cfo.Id
-    GROUP BY cfv.DepositId
+SELECT
+cfv.DepositId,
+MAX(CASE WHEN cfv.CustomFieldId IN (1224, 1225, 1226, 1227, 1228, 1229, 1230, 1231, 1232, 1233, 1234, 1235, 1236, 1237, 1238, 1239, 1240, 1241, 1242, 1243, 1200, 1167, 1159, 1117, 1125, 1133, 1174, 1181,1162, 1150, 1141, 1203, 1261, 1196, 1188, 1199, 1195, 1260, 1202, 1244, 1245, 1149, 1155, 1158, 1163, 1161)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS meter,
+MAX(CASE WHEN cfv.CustomFieldId In (1189, 1142, 1126, 1118, 1134, 1175, 1182, 1168)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS floor,
+MAX(CASE WHEN cfv.CustomFieldId In (1143, 1135, 1127, 1119, 1176, 1169, 1166, 1151, 1197, 1183, 1190, 1262)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS rooms,
+MAX(CASE WHEN cfv.CustomFieldId In (1136, 1152, 1184, 1191, 1198, 1263, 1170, 1177, 1144, 1120, 1128)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS age,
+MAX(CASE WHEN cfv.CustomFieldId In (1185, 1192, 1171, 1178, 1121, 1129, 1137, 1145)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS parking,
+MAX(CASE WHEN cfv.CustomFieldId In (1193, 1186, 1179, 1172, 1146, 1138, 1130, 1122)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS warehouse,
+MAX(CASE WHEN cfv.CustomFieldId IN (1123, 1131, 1139, 1147, 1173, 1180, 1187, 1194)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS elevator,
+MAX(CASE WHEN cfv.CustomFieldId In (1148, 1140, 1132, 1124)
+THEN COALESCE(cfv.Value, cfo.Value) END) AS loan
+FROM CustomFieldValues cfv
+LEFT JOIN CustomFieldOptions cfo
+ON cfv.CustomFieldOptionId = cfo.Id
+GROUP BY cfv.DepositId
 )
 SELECT
-    d.Id,
-    d.Title,
-    d.Description,
-    dc.Link AS DepositCategoryId,
-    bi.Title AS PropertyTypeId,
-    d.CityId,
-    r.Name AS RegionId,
-    d.CreatedTime,
-    d.ModifiedDate,
-    d.MainStreet,
-    d.Price,
-    d.RentalPrice,
-    p.meter,
-    p.floor,
-    p.rooms,
-    p.age,
-    p.parking,
-    p.warehouse,
-    p.elevator,
-    p.loan
+d.Id,
+d.Title,
+d.Description,
+dc.Link AS DepositCategoryId,
+bi.Title AS PropertyTypeId,
+d.StatusId,
+d.CityId,
+r.Name AS RegionId,
+d.ModifiedDate,
+d.MainStreet,
+d.Price,
+d.RentalPrice,
+p.meter,
+p.floor,
+p.rooms,
+p.age,
+p.parking,
+p.warehouse,
+p.elevator,
+p.loan
 FROM FilteredDeposits d
-LEFT JOIN DepositCategories dc ON d.DepositCategoryId = dc.Id
-LEFT JOIN BaseInfos bi ON d.PropertyTypeId = bi.Id
-LEFT JOIN Regions r ON d.RegionId = r.Id
-LEFT JOIN PivotCustomFields p ON d.Id = p.DepositId;
+LEFT JOIN DepositCategories dc
+ON d.DepositCategoryId = dc.Id
+LEFT JOIN BaseInfos bi
+ON d.PropertyTypeId = bi.Id
+LEFT JOIN Regions r
+ON d.RegionId = r.Id
+LEFT JOIN PivotCustomFields p
+ON d.Id = p.DepositId
+ORDER BY d.Id DESC;
 """
 
 def get_cursor():
@@ -148,17 +144,24 @@ def transform_function(**context):
     if not rows:
         return []
 
+    tehran_tz = pytz.timezone("Asia/Tehran")
+    
     transformed = []
     for row in rows:
         row_dict = dict(row)
 
+        modified_date = row_dict.get("ModifiedDate")
+        if modified_date:
+            modified_date = tehran_tz.localize(modified_date).astimezone(pytz.UTC).isoformat()
+
         api_row = {
             "id": int(row_dict.get("Id")),
-            "property_type": str(row_dict.get("PropertyTypeId", "")),
-            "deposit_category": str(row_dict.get("DepositCategoryId")), 
-            "city_id": int(row_dict.get("CityId")),
-            "title": str(row_dict.get("Title" , "")),
-            "region": str(row_dict.get("RegionId") or None), 
+            "property_type": str(row_dict.get("PropertyTypeId") or ""),
+            "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
+            "city_id": int(row_dict.get("CityId") or 0),
+            "title": str(row_dict.get("Title") or ""),
+            "modified_date": modified_date,
+            "region": str(row_dict.get("RegionId") or ""),
             "price": int(row_dict.get("Price") or 0),
             "rental_price": int(row_dict.get("RentalPrice") or 0),
             "meter": int(row_dict.get("meter") or 0),
@@ -169,13 +172,14 @@ def transform_function(**context):
             "warehouse": bool(row_dict.get("warehouse")),
             "elevator": bool(row_dict.get("elevator")),
             "loan": bool(row_dict.get("loan")),
+            "description": str(row_dict.get("Description") or ""),
+            "status": "active" if row_dict.get("StatusId") == 1247 else "inactive"
         }
 
         transformed.append(api_row)
 
     logging.info(f"Transformed {len(transformed)} records")
     return transformed
-
 
 def load_function(**context):
     data = context["ti"].xcom_pull(task_ids="transform_task")
@@ -212,7 +216,7 @@ def update_time_function(**context):
 
 # DAG
 with DAG(
-    dag_id="delta_data_extractor",
+    dag_id="delta-data-extractor",
     start_date=datetime(2024, 1, 1),
     schedule_interval="@hourly",
     catchup=False,
