@@ -10,7 +10,7 @@ from pymongo import MongoClient
 from utils.config import config
 from web_scraping.utils.redis_utils import add_to_bloom_filter
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "websites.yaml")
+CONFIG_PATH = "/opt/airflow/dags/web_scraping/websites.yaml"
 
 with open(CONFIG_PATH, "r") as f:
     yaml_config = yaml.safe_load(f)
