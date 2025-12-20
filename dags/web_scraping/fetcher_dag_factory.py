@@ -45,7 +45,7 @@ def load_function(website_conf, **kwargs):
 
 
 def create_fetcher_dag(website_conf):
-    dag_id = f"{website_conf['name']}_fetcher"
+    dag_id = f"{website_conf['name']}-fetcher"
     schedule = website_conf.get("fetcher_schedule", None)
 
     default_args = {
@@ -106,5 +106,5 @@ def create_fetcher_dag(website_conf):
 
 # Register each website as its own DAG
 for website in yaml_config["websites"]:
-    dag_id = f"{website['name']}_fetcher"
+    dag_id = f"{website['name']}-fetcher"
     globals()[dag_id] = create_fetcher_dag(website)
