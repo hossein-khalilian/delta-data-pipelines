@@ -1,13 +1,12 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import json
-from decimal import Decimal
-
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import pytz
-import pymssql
 import requests
 import logging
+import json
+from decimal import Decimal
+import pymssql
 from utils.config import config
 
 class DateTimeAndDecimalEncoder(json.JSONEncoder):
@@ -19,9 +18,8 @@ class DateTimeAndDecimalEncoder(json.JSONEncoder):
         return super().default(obj)
     
 # config
-START_TIME_VAR = "last_successful_run"
-DEFAULT_START_TIME = (datetime.now() - timedelta(days=1)).replace(microsecond=0).isoformat()
-ENDPOINT_URL = (f"{config["search_endpoint_url"]}/add-properties")
+ENDPOINT_UPDATE_ALL = f"{config['search_endpoint_url']}/update-all-properties"
+ENDPOINT_ADD = f"{config['search_endpoint_url']}/add-properties"
 BATCH_SIZE = 200
 
 DB_CONFIG = {
@@ -49,8 +47,8 @@ d.MainStreet,
 d.Price,
 d.RentalPrice
 FROM Deposits d
-WHERE d.StatusId <> 1254
-	AND d.ModifiedDate > %s
+WHERE d.StatusId =1247
+	AND d.ModifiedDate > DATEADD(MONTH, -6, GETDATE())
 ),
 PivotCustomFields AS (
 SELECT
@@ -108,7 +106,6 @@ LEFT JOIN PivotCustomFields p
 ON d.Id = p.DepositId
 ORDER BY d.Id DESC;
 """
-
 def get_cursor():
     conn = pymssql.connect(**DB_CONFIG)
     return conn, conn.cursor(as_dict=True)
@@ -122,150 +119,109 @@ def safe_int(value):
         return int(float(value))
     except (TypeError, ValueError):
         return 0
-# TASKS
-def get_time_function(**context):
-    url = f"{config['search_endpoint_url']}/last-modified-property"
+    
+def call_update_all_properties():
+    response = requests.post(ENDPOINT_UPDATE_ALL, timeout=20)
 
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json() or {}
-        modified_date_str = data.get("modified_date")
-    except Exception as e:
-        logging.warning(f"Failed to fetch last_modified: {e}")
-        modified_date_str = None
-
-    tehran_tz = pytz.timezone("Asia/Tehran")
-
-    if modified_date_str:
-        # API time = UTC
-        utc_dt = datetime.fromisoformat(modified_date_str)
-
-        if utc_dt.tzinfo is None:
-            utc_dt = utc_dt.replace(tzinfo=timezone.utc)
-
-        # ✅ Convert to Iran for DB query
-        iran_dt = utc_dt.astimezone(tehran_tz).replace(tzinfo=None)
-
-        logging.info(
-            f"API UTC: {utc_dt.isoformat()} | "
-            f"Iran DB time: {iran_dt.isoformat()}"
+    if not response.ok:
+        logging.error(
+            "Update-all-properties failed. Status=%s Response=%s",
+            response.status_code,
+            response.text
         )
+        response.raise_for_status()
 
-        return iran_dt
+    logging.info("update-all-properties called successfully")
 
-    fallback_dt = (datetime.now(tehran_tz) - timedelta(days=1)).replace(tzinfo=None)
-    logging.warning(f"No modified_date found. Falling back to: {fallback_dt.isoformat()}")
-    return fallback_dt
-
-
-def extract_function(**context):
-    last_run = context["ti"].xcom_pull(task_ids="get_time_task")
-
+def extract_function():
     conn, cursor = get_cursor()
-    cursor.execute(QUERY, (last_run,))
+    cursor.execute(QUERY)
     rows = cursor.fetchall()
     conn.close()
 
     logging.info(f"Extracted {len(rows)} rows from SQL Server")
     return rows
 
-def to_camel_case(s):
-    parts = s.split('_')
-    return parts[0].lower() + ''.join(word.capitalize() for word in parts[1:])
-
-def transform_function(**context):
-    rows = context["ti"].xcom_pull(task_ids="extract_task")
+def transform_function(ti):
+    rows = ti.xcom_pull(task_ids="extract_task")
     if not rows:
         return []
 
     tehran_tz = pytz.timezone("Asia/Tehran")
-    
     transformed = []
+
     for row in rows:
-        row_dict = dict(row)
+        modified_date = row.get("ModifiedDate")
+        modified_date_utc = None
 
-        db_modified = row_dict.get("ModifiedDate")
+        if modified_date:
+            iran_dt = tehran_tz.localize(modified_date)
+            modified_date_utc = iran_dt.astimezone(pytz.UTC).isoformat()
 
-        if db_modified:
-            # DB time = Iran naive
-            iran_dt = tehran_tz.localize(db_modified)
-
-            # ✅ Convert to UTC for API
-            utc_dt = iran_dt.astimezone(pytz.UTC)
-
-            modified_date_utc = utc_dt.isoformat()
-        else:
-            modified_date_utc = None
-
-        api_row = {
-            "id": int(row_dict.get("Id")),
-            "property_type": str(row_dict.get("PropertyTypeId") or ""),
-            "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
-            "city_id": int(row_dict.get("CityId") or 0),
-            "title": str(row_dict.get("Title") or ""),
+        transformed.append({
+            "id": int(row.get("Id")),
+            "property_type": str(row.get("PropertyTypeId") or ""),
+            "deposit_category": str(row.get("DepositCategoryId") or ""),
+            "city_id": int(row.get("CityId") or 0),
+            "title": str(row.get("Title") or ""),
             "modified_date": modified_date_utc,
-            "region": str(row_dict.get("RegionId") or ""),
-            "price": int(row_dict.get("Price") or 0),
-            "rental_price": int(row_dict.get("RentalPrice") or 0),
-            "meter": safe_int(row_dict.get("meter")),
-            "floor": str(row_dict.get("floor") or ""),
-            "rooms": str(row_dict.get("rooms") or ""),
-            "age": int(row_dict.get("age") or 0),
-            "parking": bool(row_dict.get("parking")),
-            "warehouse": bool(row_dict.get("warehouse")),
-            "elevator": bool(row_dict.get("elevator")),
-            "loan": bool(row_dict.get("loan")),
-            "description": str(row_dict.get("Description") or ""),
-            "status": "active" if row_dict.get("StatusId") == 1247 else "inactive"
-        }
-
-        transformed.append(api_row)
+            "region": str(row.get("RegionId") or ""),
+            "price": int(row.get("Price") or 0),
+            "rental_price": int(row.get("RentalPrice") or 0),
+            "meter": safe_int(row.get("meter")),
+            "floor": str(row.get("floor") or ""),
+            "rooms": str(row.get("rooms") or ""),
+            "age": int(row.get("age") or 0),
+            "parking": bool(row.get("parking")),
+            "warehouse": bool(row.get("warehouse")),
+            "elevator": bool(row.get("elevator")),
+            "loan": bool(row.get("loan")),
+            "description": str(row.get("Description") or ""),
+            "status": "active" if row.get("StatusId") == 1247 else "inactive"
+        })
 
     logging.info(f"Transformed {len(transformed)} records")
     return transformed
 
-def load_function(**context):
-    data = context["ti"].xcom_pull(task_ids="transform_task")
+def load_function(ti):
+    data = ti.xcom_pull(task_ids="transform_task")
     if not data:
         logging.info("No data to send")
-        return None
+        return
 
     for batch in chunkify(data, BATCH_SIZE):
-        payload = {
-            "properties": batch
-        }
+        payload = {"properties": batch}
         response = requests.post(
-            ENDPOINT_URL,
+            ENDPOINT_ADD,
             data=json.dumps(payload, cls=DateTimeAndDecimalEncoder),
             timeout=20
         )
-        
+
         if not response.ok:
             logging.error(
                 "Failed to send batch. Status=%s Response=%s",
                 response.status_code,
                 response.text
             )
-
-        response.raise_for_status()
+            response.raise_for_status()
 
     logging.info("All batches sent successfully")
-    return 
 
-# DAG
+# ------------------ DAG ------------------
+tehran_tz = pytz.timezone("Asia/Tehran")
+
 with DAG(
-    dag_id="delta-data-extractor",
-    start_date=datetime(2024, 1, 1),
-    schedule_interval="@hourly",
+    dag_id="nightly-properties-sync",
+    start_date=datetime(2024, 1, 1, tzinfo=pytz.UTC),
+    schedule_interval="0 0 * * *",  # 03:30 Tehran
     catchup=False,
     max_active_runs=1,
-    tags=["extract data from database"],
+    tags=["properties", "nightly", "etl"],
 ) as dag:
 
-    get_time_task = PythonOperator(
-        task_id="get_time_task",
-        python_callable=get_time_function,
+    update_all_task = PythonOperator(
+        task_id="update_all_properties",
+        python_callable=call_update_all_properties,
     )
 
     extract_task = PythonOperator(
@@ -283,4 +239,4 @@ with DAG(
         python_callable=load_function,
     )
 
-    get_time_task >> extract_task >> transform_task >> load_task
+    update_all_task >> extract_task >> transform_task >> load_task
