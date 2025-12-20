@@ -22,7 +22,7 @@ class DateTimeAndDecimalEncoder(json.JSONEncoder):
 # config
 START_TIME_VAR = "last_successful_run"
 DEFAULT_START_TIME = (datetime.now() - timedelta(days=1)).replace(microsecond=0).isoformat()
-ENDPOINT_URL = config.get("search_endpoint_url")
+ENDPOINT_URL = (f"{config["search_endpoint_url"]}/add-properties")
 BATCH_SIZE = 200
 
 DB_CONFIG = {
@@ -51,7 +51,7 @@ d.Price,
 d.RentalPrice
 FROM Deposits d
 WHERE d.StatusId <> 1254
-	AND d.ModifiedDate > '2025-06-17 11:30:00.000'
+	AND d.ModifiedDate > %s
 ),
 PivotCustomFields AS (
 SELECT
@@ -118,17 +118,55 @@ def chunkify(data, size):
     for i in range(0, len(data), size):
         yield data[i:i + size]
 
-
+def safe_int(value):
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
 # TASKS
-def last_runtime_function(**context):
-    value = Variable.get(START_TIME_VAR, default_var=DEFAULT_START_TIME)
-    return datetime.fromisoformat(value)
+def get_time_function(**context):
+    url = f"{config['search_endpoint_url']}/last-modified-property"
+
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+
+    data = response.json() or {}
+    modified_date_str = data.get("modified_date")
+
+    tehran_tz = pytz.timezone("Asia/Tehran")
+
+    if modified_date_str:
+        # API → UTC
+        utc_dt = datetime.fromisoformat(modified_date_str)
+
+        if utc_dt.tzinfo is None:
+            utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+
+        # ✅ تبدیل به تایم ایران (برای DB)
+        iran_dt = utc_dt.astimezone(tehran_tz)
+
+        logging.info(
+            f"Last modified (UTC): {utc_dt.isoformat()} | "
+            f"Converted to Iran time: {iran_dt.isoformat()}"
+        )
+
+        return iran_dt.replace(tzinfo=None)  # SQL Server naive datetime
+
+    # 🔁 fallback: یک روز قبل به تایم ایران
+    fallback_dt = datetime.now(tehran_tz) - timedelta(days=1)
+
+    logging.warning(
+        "No modified_date found in API response. "
+        f"Falling back to Iran time: {fallback_dt.isoformat()}"
+    )
+
+    return fallback_dt.replace(tzinfo=None)
 
 def extract_function(**context):
-    last_run = context["ti"].xcom_pull(task_ids="last_runtime_task")
+    last_run = context["ti"].xcom_pull(task_ids="get_time_task")
 
     conn, cursor = get_cursor()
-    cursor.execute(QUERY, (last_run, last_run))
+    cursor.execute(QUERY, (last_run,))
     rows = cursor.fetchall()
     conn.close()
 
@@ -152,7 +190,8 @@ def transform_function(**context):
 
         modified_date = row_dict.get("ModifiedDate")
         if modified_date:
-            modified_date = tehran_tz.localize(modified_date).astimezone(pytz.UTC).isoformat()
+            modified_date = tehran_tz.localize(modified_date).isoformat()
+
 
         api_row = {
             "id": int(row_dict.get("Id")),
@@ -164,7 +203,7 @@ def transform_function(**context):
             "region": str(row_dict.get("RegionId") or ""),
             "price": int(row_dict.get("Price") or 0),
             "rental_price": int(row_dict.get("RentalPrice") or 0),
-            "meter": int(row_dict.get("meter") or 0),
+            "meter": safe_int(row_dict.get("meter")),
             "floor": str(row_dict.get("floor") or ""),
             "rooms": str(row_dict.get("rooms") or ""),
             "age": int(row_dict.get("age") or 0),
@@ -209,10 +248,10 @@ def load_function(**context):
     logging.info("All batches sent successfully")
     return datetime.now().replace(microsecond=0).isoformat()
 
-def update_time_function(**context):
-    new_value = context["ti"].xcom_pull(task_ids="load_function")
-    if new_value:
-        Variable.set(START_TIME_VAR, new_value)
+# def update_time_function(**context):
+#     new_value = context["ti"].xcom_pull(task_ids="load_function")
+#     if new_value:
+#         Variable.set(START_TIME_VAR, new_value)
 
 # DAG
 with DAG(
@@ -224,9 +263,9 @@ with DAG(
     tags=["extract data from database"],
 ) as dag:
 
-    last_runtime_task = PythonOperator(
-        task_id="last_runtime_task",
-        python_callable=last_runtime_function,
+    get_time_task = PythonOperator(
+        task_id="get_time_task",
+        python_callable=get_time_function,
     )
 
     extract_task = PythonOperator(
@@ -244,9 +283,10 @@ with DAG(
         python_callable=load_function,
     )
 
-    update_time_task = PythonOperator(
-        task_id="update_time_task",
-        python_callable=update_time_function,
-    )
+    # update_time_task = PythonOperator(
+    #     task_id="update_time_task",
+    #     python_callable=update_time_function,
+    # )
 
-    last_runtime_task >> extract_task >> transform_task >> load_task >> update_time_task
+    # get_time_task >> extract_task >> transform_task >> load_task >> update_time_task
+    get_time_task >> extract_task >> transform_task >> load_task
