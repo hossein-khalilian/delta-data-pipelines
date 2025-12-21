@@ -2,13 +2,13 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 import json
 from decimal import Decimal
-
 from datetime import datetime, timedelta, timezone
 import pytz
 import pymssql
 import requests
 import logging
 from utils.config import config
+import json
 
 class DateTimeAndDecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -44,6 +44,7 @@ d.PropertyTypeId,
 d.StatusId,
 d.CityId,
 d.RegionId,
+d.CreatedTime,
 d.ModifiedDate,
 d.MainStreet,
 d.Price,
@@ -85,6 +86,7 @@ bi.Title AS PropertyTypeId,
 d.StatusId,
 d.CityId,
 r.Name AS RegionId,
+d.CreatedTime,
 d.ModifiedDate,
 d.MainStreet,
 d.Price,
@@ -122,6 +124,7 @@ def safe_int(value):
         return int(float(value))
     except (TypeError, ValueError):
         return 0
+    
 # TASKS
 def get_time_function(**context):
     url = f"{config['search_endpoint_url']}/last-modified-property"
@@ -138,13 +141,10 @@ def get_time_function(**context):
     tehran_tz = pytz.timezone("Asia/Tehran")
 
     if modified_date_str:
-        # API time = UTC
         utc_dt = datetime.fromisoformat(modified_date_str)
-
         if utc_dt.tzinfo is None:
             utc_dt = utc_dt.replace(tzinfo=timezone.utc)
 
-        # ✅ Convert to Iran for DB query
         iran_dt = utc_dt.astimezone(tehran_tz).replace(tzinfo=None)
 
         logging.info(
@@ -177,6 +177,7 @@ def to_camel_case(s):
 def transform_function(**context):
     rows = context["ti"].xcom_pull(task_ids="extract_task")
     if not rows:
+        logging.warning("No rows received from extract")
         return []
 
     tehran_tz = pytz.timezone("Asia/Tehran")
@@ -186,17 +187,20 @@ def transform_function(**context):
         row_dict = dict(row)
 
         db_modified = row_dict.get("ModifiedDate")
-
         if db_modified:
-            # DB time = Iran naive
             iran_dt = tehran_tz.localize(db_modified)
-
-            # ✅ Convert to UTC for API
             utc_dt = iran_dt.astimezone(pytz.UTC)
-
             modified_date_utc = utc_dt.isoformat()
         else:
             modified_date_utc = None
+            
+        db_created = row_dict.get("CreatedTime")
+        if db_created:
+            iran_dt = tehran_tz.localize(db_created)
+            utc_dt = iran_dt.astimezone(pytz.UTC)
+            created_time_utc = utc_dt.isoformat()
+        else:
+            created_time_utc = None
 
         api_row = {
             "id": int(row_dict.get("Id")),
@@ -204,7 +208,8 @@ def transform_function(**context):
             "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
             "city_id": int(row_dict.get("CityId") or 0),
             "title": str(row_dict.get("Title") or ""),
-            "modified_date": modified_date_utc,
+            "created_time": created_time_utc,
+            "modified_time": modified_date_utc,
             "region": str(row_dict.get("RegionId") or ""),
             "price": int(row_dict.get("Price") or 0),
             "rental_price": int(row_dict.get("RentalPrice") or 0),
@@ -221,7 +226,8 @@ def transform_function(**context):
         }
 
         transformed.append(api_row)
-
+        
+    logging.info("Sample transformed: %s", json.dumps(transformed[:3], ensure_ascii=False))
     logging.info(f"Transformed {len(transformed)} records")
     return transformed
 
