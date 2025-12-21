@@ -261,12 +261,12 @@ def load_function(**context):
 
 # DAG
 with DAG(
-    dag_id="delta-data-extractor",
+    dag_id="sql-search-index-incremental",
     start_date=datetime(2024, 1, 1),
     schedule_interval="@hourly",
     catchup=False,
     max_active_runs=1,
-    tags=["extract data from database"],
+    tags=["extract data", "delta database"],
 ) as dag:
 
     get_time_task = PythonOperator(

@@ -1,33 +1,23 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import requests
 import logging
-import json
-from decimal import Decimal
 import pymssql
 from utils.config import config
 
-class DateTimeAndDecimalEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        elif isinstance(obj, Decimal):
-            return float(obj)
-        return super().default(obj)
-    
+import json
+
 # config
 ENDPOINT_UPDATE_ALL = f"{config['search_endpoint_url']}/update-all-properties"
-ENDPOINT_ADD = f"{config['search_endpoint_url']}/add-properties"
-BATCH_SIZE = 200
 
 DB_CONFIG = {
-    "server": config.get('sql_host'),
-    "port": config.get('sql_port'),
-    "database": config.get('sql_name'),
-    "user": config.get('sql_user'),
-    "password": config.get('sql_password'),
+    "server": config["sql_host"],
+    "port": config["sql_port"],
+    "database": config["sql_name"],
+    "user": config["sql_user"],
+    "password": config["sql_password"],
 }
 
 # query
@@ -42,13 +32,14 @@ d.PropertyTypeId,
 d.StatusId,
 d.CityId,
 d.RegionId,
+d.Createdtime,
 d.ModifiedDate,
 d.MainStreet,
 d.Price,
 d.RentalPrice
 FROM Deposits d
 WHERE d.StatusId =1247
-	AND d.ModifiedDate > DATEADD(MONTH, -6, GETDATE())
+	AND d.ModifiedDate > DATEADD(MONTH, -1, GETDATE())
 ),
 PivotCustomFields AS (
 SELECT
@@ -83,6 +74,7 @@ bi.Title AS PropertyTypeId,
 d.StatusId,
 d.CityId,
 r.Name AS RegionId,
+d.CreatedTime,
 d.ModifiedDate,
 d.MainStreet,
 d.Price,
@@ -106,137 +98,189 @@ LEFT JOIN PivotCustomFields p
 ON d.Id = p.DepositId
 ORDER BY d.Id DESC;
 """
+
+# UTILS
 def get_cursor():
-    conn = pymssql.connect(**DB_CONFIG)
+    conn = pymssql.connect(
+        server=DB_CONFIG["server"],
+        port=DB_CONFIG["port"],
+        user=DB_CONFIG["user"],
+        password=DB_CONFIG["password"],
+        database=DB_CONFIG["database"],
+        login_timeout=30,
+        timeout=300,
+        autocommit=True
+    )
     return conn, conn.cursor(as_dict=True)
 
-def chunkify(data, size):
-    for i in range(0, len(data), size):
-        yield data[i:i + size]
 
 def safe_int(value):
     try:
         return int(float(value))
-    except (TypeError, ValueError):
+    except Exception:
         return 0
-    
-def call_update_all_properties():
-    response = requests.post(ENDPOINT_UPDATE_ALL, timeout=20)
 
-    if not response.ok:
-        logging.error(
-            "Update-all-properties failed. Status=%s Response=%s",
-            response.status_code,
-            response.text
-        )
-        response.raise_for_status()
+def age_to_build_year(age):
+    try:
+        age = int(age)
+    except Exception:
+        return None
 
-    logging.info("update-all-properties called successfully")
+    current_gyear = datetime.now().year
+    current_jyear = current_gyear - 621  
+    if age > 30:
+        return current_jyear - 31
+    elif age > 20:
+        return current_jyear - 21
+    else:
+        return 1404
 
-def extract_function():
+def normalize_property_type(property_type):
+    if not property_type:
+        return None
+
+    pt = str(property_type).strip()
+
+    if "مشارکت" in pt:
+        return None  
+
+    if "زمین" in pt:
+        return "باغ باغچه و زمین"
+
+    if "صنعتی" in pt or "زراعی" in pt:
+        return "باغ باغچه و زمین"
+
+    allowed = {
+        "آپارتمان مسکونی",
+        "آپارتمان اداری",
+        "خانه - ویلا",
+        "مغازه - تجاری",
+        "مستغلات",
+        "باغ باغچه و زمین",
+    }
+
+    return pt if pt in allowed else pt
+
+
+def extract(**_):
     conn, cursor = get_cursor()
     cursor.execute(QUERY)
     rows = cursor.fetchall()
     conn.close()
 
-    logging.info(f"Extracted {len(rows)} rows from SQL Server")
+    logging.info("Extracted %s rows", len(rows))
     return rows
 
-def transform_function(ti):
-    rows = ti.xcom_pull(task_ids="extract_task")
+def transform(ti, **_):
+    rows = ti.xcom_pull(task_ids="extract")
     if not rows:
+        logging.warning("No rows received from extract")
         return []
 
     tehran_tz = pytz.timezone("Asia/Tehran")
     transformed = []
-
+    
     for row in rows:
-        modified_date = row.get("ModifiedDate")
-        modified_date_utc = None
+        row_dict = dict(row)
+        raw_property_type = row_dict.get("PropertyTypeId")
+        normalized_property_type = normalize_property_type(raw_property_type)
 
-        if modified_date:
-            iran_dt = tehran_tz.localize(modified_date)
-            modified_date_utc = iran_dt.astimezone(pytz.UTC).isoformat()
+        if normalized_property_type is None:
+            continue
+        
+        db_modified = row_dict.get("ModifiedDate")
+        if db_modified:
+            iran_dt = tehran_tz.localize(db_modified)
+            utc_dt = iran_dt.astimezone(pytz.UTC)
+            modified_date_utc = utc_dt.isoformat()
+        else:
+            modified_date_utc = None
+            
+        db_created = row_dict.get("CreatedTime")
+        if db_created:
+            iran_dt = tehran_tz.localize(db_created)
+            utc_dt = iran_dt.astimezone(pytz.UTC)
+            created_time_utc = utc_dt.isoformat()
+        else:
+            created_time_utc = None
+            
+        raw_age = safe_int(row_dict.get("age"))
+        build_year = age_to_build_year(raw_age)
 
-        transformed.append({
-            "id": int(row.get("Id")),
-            "property_type": str(row.get("PropertyTypeId") or ""),
-            "deposit_category": str(row.get("DepositCategoryId") or ""),
-            "city_id": int(row.get("CityId") or 0),
-            "title": str(row.get("Title") or ""),
-            "modified_date": modified_date_utc,
-            "region": str(row.get("RegionId") or ""),
-            "price": int(row.get("Price") or 0),
-            "rental_price": int(row.get("RentalPrice") or 0),
-            "meter": safe_int(row.get("meter")),
-            "floor": str(row.get("floor") or ""),
-            "rooms": str(row.get("rooms") or ""),
-            "age": int(row.get("age") or 0),
-            "parking": bool(row.get("parking")),
-            "warehouse": bool(row.get("warehouse")),
-            "elevator": bool(row.get("elevator")),
-            "loan": bool(row.get("loan")),
-            "description": str(row.get("Description") or ""),
-            "status": "active" if row.get("StatusId") == 1247 else "inactive"
-        })
+        api_row = {
+            "id": int(row_dict.get("Id")),
+            "property_type": normalized_property_type,
+            "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
+            "city_id": int(row_dict.get("CityId") or 0),
+            "title": str(row_dict.get("Title") or ""),
+            "created_time": created_time_utc,
+            "modified_time": modified_date_utc,
+            "region": str(row_dict.get("RegionId") or ""),
+            "price": int(row_dict.get("Price") or 0),
+            "rental_price": int(row_dict.get("RentalPrice") or 0),
+            "meter": safe_int(row_dict.get("meter")),
+            "floor": str(row_dict.get("floor") or ""),
+            "rooms": str(row_dict.get("rooms") or ""),
+            "age": build_year ,
+            "parking": bool(row_dict.get("parking")),
+            "warehouse": bool(row_dict.get("warehouse")),
+            "elevator": bool(row_dict.get("elevator")),
+            "loan": bool(row_dict.get("loan")),
+            "description": str(row_dict.get("Description") or ""),
+            "status": "active" ,
+        }
 
+        transformed.append(api_row)
+        
     logging.info(f"Transformed {len(transformed)} records")
     return transformed
 
-def load_function(ti):
-    data = ti.xcom_pull(task_ids="transform_task")
-    if not data:
-        logging.info("No data to send")
+def update_all(ti, **_):
+    properties = ti.xcom_pull(task_ids="transform")
+
+    if not properties:
+        logging.warning("No data to send to update-all")
         return
 
-    for batch in chunkify(data, BATCH_SIZE):
-        payload = {"properties": batch}
-        response = requests.post(
-            ENDPOINT_ADD,
-            data=json.dumps(payload, cls=DateTimeAndDecimalEncoder),
-            timeout=20
-        )
-
-        if not response.ok:
-            logging.error(
-                "Failed to send batch. Status=%s Response=%s",
-                response.status_code,
-                response.text
-            )
-            response.raise_for_status()
-
-    logging.info("All batches sent successfully")
-
-# ------------------ DAG ------------------
-tehran_tz = pytz.timezone("Asia/Tehran")
-
-with DAG(
-    dag_id="nightly-properties-sync",
-    start_date=datetime(2024, 1, 1, tzinfo=pytz.UTC),
-    schedule_interval="0 0 * * *",  # 03:30 Tehran
-    catchup=False,
-    max_active_runs=1,
-    tags=["properties", "nightly", "etl"],
-) as dag:
-
-    update_all_task = PythonOperator(
-        task_id="update_all_properties",
-        python_callable=call_update_all_properties,
+    response = requests.post(
+        ENDPOINT_UPDATE_ALL,
+        json={"properties": properties},
+        timeout=120,
     )
 
+    if not response.ok:
+        logging.error(
+            "Update-all failed | status=%s | response=%s",
+            response.status_code,
+            response.text,
+        )
+        response.raise_for_status()
+
+    logging.info("Update-all succeeded | count=%s", len(properties))
+
+# DAG
+with DAG(
+    dag_id="sql-search-index-full-rebuild",
+    start_date=datetime(2024, 1, 1),
+    schedule_interval="0 0 * * *",
+    catchup=False,
+    max_active_runs=1,
+    tags=["search-engine", "db-update", "nightly"],
+) as dag:
+
     extract_task = PythonOperator(
-        task_id="extract_task",
-        python_callable=extract_function,
+        task_id="extract",
+        python_callable=extract,
     )
 
     transform_task = PythonOperator(
-        task_id="transform_task",
-        python_callable=transform_function,
+        task_id="transform",
+        python_callable=transform,
     )
 
-    load_task = PythonOperator(
-        task_id="load_task",
-        python_callable=load_function,
+    update_all_task = PythonOperator(
+        task_id="update_all",
+        python_callable=update_all,
     )
 
-    update_all_task >> extract_task >> transform_task >> load_task
+    extract_task >> transform_task >> update_all_task
