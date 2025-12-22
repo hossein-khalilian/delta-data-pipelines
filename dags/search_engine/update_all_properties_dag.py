@@ -1,5 +1,5 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.operators.python import PythonOperator, ShortCircuitOperator
 from datetime import datetime
 import pytz
 import requests
@@ -7,10 +7,12 @@ import logging
 import pymssql
 from utils.config import config
 
-import json
+# import json
 
 # config
 ENDPOINT_UPDATE_ALL = f"{config['search_endpoint_url']}/update-all-properties"
+ENDPOINT_HEALTH = f"{config['search_endpoint_url']}/health"
+BATCH_SIZE = 200
 
 DB_CONFIG = {
     "server": config["sql_host"],
@@ -113,7 +115,6 @@ def get_cursor():
     )
     return conn, conn.cursor(as_dict=True)
 
-
 def safe_int(value):
     try:
         return int(float(value))
@@ -143,11 +144,7 @@ def normalize_property_type(property_type):
 
     if "مشارکت" in pt:
         return None  
-
-    if "زمین" in pt:
-        return "باغ باغچه و زمین"
-
-    if "صنعتی" in pt or "زراعی" in pt:
+    if "زمین" in pt or "صنعتی" in pt:
         return "باغ باغچه و زمین"
 
     allowed = {
@@ -161,30 +158,50 @@ def normalize_property_type(property_type):
 
     return pt if pt in allowed else pt
 
+def health_check(**context):
+    try:
+        response = requests.get(ENDPOINT_HEALTH, timeout=30)
+        if response.status_code == 200:
+            logging.info( response.status_code)
+            return True
+        else:
+            logging.error("Health check failed: status=%s, response=%s", response.status_code, response.text)
+            return False
+    except Exception as e:
+        logging.error("Health check connection failed: %s", str(e))
+        return False
 
-def extract(**_):
+def extract(ti, **context):
     conn, cursor = get_cursor()
-    cursor.execute(QUERY)
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor.execute(QUERY)
+        rows = cursor.fetchall()
+        row_count = len(rows)
+        
+        logging.info("Extracted %s rows from database", row_count)
+        
+        ti.xcom_push(key="extracted_rows", value=rows)
+        ti.xcom_push(key="extracted_count", value=row_count)
+        
+        return None
+    finally:
+        conn.close()
 
-    logging.info("Extracted %s rows", len(rows))
-    return rows
-
-def transform(ti, **_):
-    rows = ti.xcom_pull(task_ids="extract")
+def transform(ti, **context):
+    rows = ti.xcom_pull(task_ids="extract", key="extracted_rows")
     if not rows:
-        logging.warning("No rows received from extract")
-        return []
+        logging.warning("No rows to transform")
+        ti.xcom_push(key="transformed_properties", value=[])
+        ti.xcom_push(key="transformed_count", value=0)
+        return None
 
     tehran_tz = pytz.timezone("Asia/Tehran")
     transformed = []
     
     for row in rows:
         row_dict = dict(row)
-        raw_property_type = row_dict.get("PropertyTypeId")
-        normalized_property_type = normalize_property_type(raw_property_type)
-
+        
+        normalized_property_type = normalize_property_type(row_dict.get("PropertyTypeId"))
         if normalized_property_type is None:
             continue
         
@@ -204,8 +221,7 @@ def transform(ti, **_):
         else:
             created_time_utc = None
             
-        raw_age = safe_int(row_dict.get("age"))
-        build_year = age_to_build_year(raw_age)
+        build_year = age_to_build_year(safe_int(row_dict.get("age")))
 
         api_row = {
             "id": int(row_dict.get("Id")),
@@ -233,30 +249,53 @@ def transform(ti, **_):
         transformed.append(api_row)
         
     logging.info(f"Transformed {len(transformed)} records")
-    return transformed
+    
+    ti.xcom_push(key="transformed_properties", value=transformed)
+    ti.xcom_push(key="transformed_count", value=len(transformed))
+    
+    return None
 
-def update_all(ti, **_):
-    properties = ti.xcom_pull(task_ids="transform")
-
+def update_in_batches(ti, **context):
+    properties = ti.xcom_pull(task_ids="transform", key="transformed_properties")
+    
     if not properties:
-        logging.warning("No data to send to update-all")
+        logging.warning("No data to send")
         return
 
-    response = requests.post(
-        ENDPOINT_UPDATE_ALL,
-        json={"properties": properties},
-        timeout=120,
-    )
+    total = len(properties)
+    successful_batches = 0
 
-    if not response.ok:
-        logging.error(
-            "Update-all failed | status=%s | response=%s",
-            response.status_code,
-            response.text,
-        )
-        response.raise_for_status()
+    logging.info("Total batch count = %s",(total - 1) // BATCH_SIZE + 1)
 
-    logging.info("Update-all succeeded | count=%s", len(properties))
+    for i in range(0, total, BATCH_SIZE):
+        batch = properties[i:i + BATCH_SIZE]
+        batch_num = i // BATCH_SIZE + 1
+        batch_count = len(batch)
+
+        logging.info("Sending batch %s/%s with %s records", batch_num, (total - 1) // BATCH_SIZE + 1, batch_count)
+
+        try:
+            response = requests.post(
+                ENDPOINT_UPDATE_ALL,
+                json={"properties": batch},
+                timeout=180, 
+            )
+
+            if response.ok:
+                logging.info("Batch %s sent successfully | count=%s | status=%s",
+                             batch_num, batch_count, response.status_code)
+                successful_batches += 1
+            else:
+                logging.error("Batch %s failed | status=%s | response=%s",
+                              batch_num, response.status_code, response.text)
+                response.raise_for_status()  # fail 
+                
+        except requests.exceptions.RequestException as e:
+            logging.error("Batch %s request failed: %s", batch_num, str(e))
+            raise  # fail 
+
+    logging.info("All batches completed | Total sent: %s properties in %s batches",
+                 total, successful_batches)
 
 # DAG
 with DAG(
@@ -267,6 +306,11 @@ with DAG(
     max_active_runs=1,
     tags=["search-engine", "db-update", "nightly"],
 ) as dag:
+    
+    health_check_task = ShortCircuitOperator(
+        task_id="health_check",
+        python_callable=health_check,
+    )
 
     extract_task = PythonOperator(
         task_id="extract",
@@ -278,9 +322,9 @@ with DAG(
         python_callable=transform,
     )
 
-    update_all_task = PythonOperator(
-        task_id="update_all",
-        python_callable=update_all,
+    update_task = PythonOperator(
+        task_id="update_in_batches",
+        python_callable=update_in_batches,
     )
 
-    extract_task >> transform_task >> update_all_task
+    health_check_task >> extract_task >> transform_task >> update_task

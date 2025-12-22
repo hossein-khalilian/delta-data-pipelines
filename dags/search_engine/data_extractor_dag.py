@@ -125,6 +125,47 @@ def safe_int(value):
     except (TypeError, ValueError):
         return 0
     
+def age_to_build_year(age):
+    try:
+        age = int(age)
+    except Exception:
+        return None
+
+    current_gyear = datetime.now().year
+    current_jyear = current_gyear - 621  
+    if age > 30:
+        return current_jyear - 31
+    elif age > 20:
+        return current_jyear - 21
+    else:
+        return 1404
+    
+def normalize_property_type(property_type):
+    if not property_type:
+        return None
+
+    pt = str(property_type).strip()
+
+    if "مشارکت" in pt:
+        return None  
+
+    if "زمین" in pt:
+        return "باغ باغچه و زمین"
+
+    if "صنعتی" in pt or "زراعی" in pt:
+        return "باغ باغچه و زمین"
+
+    allowed = {
+        "آپارتمان مسکونی",
+        "آپارتمان اداری",
+        "خانه - ویلا",
+        "مغازه - تجاری",
+        "مستغلات",
+        "باغ باغچه و زمین",
+    }
+
+    return pt if pt in allowed else pt
+
 # TASKS
 def get_time_function(**context):
     url = f"{config['search_endpoint_url']}/last-modified-property"
@@ -133,7 +174,7 @@ def get_time_function(**context):
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json() or {}
-        modified_date_str = data.get("modified_date")
+        modified_date_str = data.get("modified_time")
     except Exception as e:
         logging.warning(f"Failed to fetch last_modified: {e}")
         modified_date_str = None
@@ -185,7 +226,13 @@ def transform_function(**context):
     transformed = []
     for row in rows:
         row_dict = dict(row)
+        
+        raw_property_type = row_dict.get("PropertyTypeId")
+        normalized_property_type = normalize_property_type(raw_property_type)
 
+        if normalized_property_type is None:
+            continue
+        
         db_modified = row_dict.get("ModifiedDate")
         if db_modified:
             iran_dt = tehran_tz.localize(db_modified)
@@ -201,10 +248,13 @@ def transform_function(**context):
             created_time_utc = utc_dt.isoformat()
         else:
             created_time_utc = None
-
+            
+        raw_age = safe_int(row_dict.get("age"))
+        build_year = age_to_build_year(raw_age)
+        
         api_row = {
             "id": int(row_dict.get("Id")),
-            "property_type": str(row_dict.get("PropertyTypeId") or ""),
+            "property_type": normalized_property_type,
             "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
             "city_id": int(row_dict.get("CityId") or 0),
             "title": str(row_dict.get("Title") or ""),
@@ -216,7 +266,7 @@ def transform_function(**context):
             "meter": safe_int(row_dict.get("meter")),
             "floor": str(row_dict.get("floor") or ""),
             "rooms": str(row_dict.get("rooms") or ""),
-            "age": int(row_dict.get("age") or 0),
+            "age": build_year,
             "parking": bool(row_dict.get("parking")),
             "warehouse": bool(row_dict.get("warehouse")),
             "elevator": bool(row_dict.get("elevator")),
