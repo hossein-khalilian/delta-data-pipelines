@@ -182,11 +182,16 @@ def get_time_function(**context):
         if utc_dt.tzinfo is None:
             utc_dt = utc_dt.replace(tzinfo=timezone.utc)
 
-        iran_dt = utc_dt.astimezone(tehran_tz).replace(tzinfo=None)
-
+        iran_dt = (
+            utc_dt
+            .astimezone(tehran_tz)
+            .replace(tzinfo=None)
+            - timedelta(hours=1)
+        )
+        
         logging.info(
             f"API UTC: {utc_dt.isoformat()} | "
-            f"Iran DB time: {iran_dt.isoformat()}"
+            f"Iran DB time (minus 1h): {iran_dt.isoformat()}"
         )
 
         return iran_dt
@@ -322,6 +327,10 @@ def load_function(ti, **context):
                 data = response.json()
                 logging.info(f"(response) added count: {data.get('added_count')}")    
                 logging.info(f"(response) message : {data.get('message')}") 
+
+                if data.get('added_count') == 0:
+                    logging.error("added_count is 0, failing task")
+                    raise Exception("API error: added_count is 0")
 
             else:
                 logging.error("Batch %s failed | status=%s | response=%s",
