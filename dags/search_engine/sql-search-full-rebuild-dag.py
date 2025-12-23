@@ -158,7 +158,7 @@ def normalize_property_type(property_type):
 
     return pt if pt in allowed else pt
 
-def health_check(**context):
+def health_check_function(**context):
     try:
         response = requests.get(ENDPOINT_HEALTH, timeout=30)
         if response.status_code == 200:
@@ -171,7 +171,7 @@ def health_check(**context):
         logging.error("Health check connection failed: %s", str(e))
         return False
 
-def extract(ti, **context):
+def extract_function(ti, **context):
     conn, cursor = get_cursor()
     try:
         cursor.execute(QUERY)
@@ -187,8 +187,8 @@ def extract(ti, **context):
     finally:
         conn.close()
 
-def transform(ti, **context):
-    rows = ti.xcom_pull(task_ids="extract", key="extracted_rows")
+def transform_function(ti, **context):
+    rows = ti.xcom_pull(task_ids="extract_task", key="extracted_rows")
     if not rows:
         logging.warning("No rows to transform")
         ti.xcom_push(key="transformed_properties", value=[])
@@ -255,8 +255,8 @@ def transform(ti, **context):
     
     return None
 
-def update_in_batches(ti, **context):
-    properties = ti.xcom_pull(task_ids="transform", key="transformed_properties")
+def load_function(ti, **context):
+    properties = ti.xcom_pull(task_ids="transform_task", key="transformed_properties")
     
     if not properties:
         logging.warning("No data to send")
@@ -264,20 +264,25 @@ def update_in_batches(ti, **context):
 
     total = len(properties)
     successful_batches = 0
+    total_batches = (total - 1) // BATCH_SIZE + 1
 
-    logging.info("Total batch count = %s",(total - 1) // BATCH_SIZE + 1)
+    logging.info("Total batch count = %s",total_batches)
 
     for i in range(0, total, BATCH_SIZE):
         batch = properties[i:i + BATCH_SIZE]
         batch_num = i // BATCH_SIZE + 1
         batch_count = len(batch)
 
-        logging.info("Sending batch %s/%s with %s records", batch_num, (total - 1) // BATCH_SIZE + 1, batch_count)
+        logging.info("Sending batch %s/%s", batch_num, total_batches)
 
         try:
             response = requests.post(
                 ENDPOINT_UPDATE_ALL,
-                json={"properties": batch},
+                json={
+                    "properties": batch,
+                    "batch_number": batch_num,
+                    "total_batches":total_batches
+                },
                 timeout=180, 
             )
 
@@ -285,6 +290,10 @@ def update_in_batches(ti, **context):
                 logging.info("Batch %s sent successfully | count=%s | status=%s",
                              batch_num, batch_count, response.status_code)
                 successful_batches += 1
+                data = response.json()
+                logging.info(f"(response) added count: {data.get('added_count')}")    
+                logging.info(f"(response) message : {data.get('message')}") 
+                
             else:
                 logging.error("Batch %s failed | status=%s | response=%s",
                               batch_num, response.status_code, response.text)
@@ -308,23 +317,23 @@ with DAG(
 ) as dag:
     
     health_check_task = ShortCircuitOperator(
-        task_id="health_check",
-        python_callable=health_check,
+        task_id="health_check_task",
+        python_callable=health_check_function,
     )
 
     extract_task = PythonOperator(
-        task_id="extract",
-        python_callable=extract,
+        task_id="extract_task",
+        python_callable=extract_function,
     )
 
     transform_task = PythonOperator(
-        task_id="transform",
-        python_callable=transform,
+        task_id="transform_task",
+        python_callable=transform_function,
     )
 
-    update_task = PythonOperator(
-        task_id="update_in_batches",
-        python_callable=update_in_batches,
+    load_task = PythonOperator(
+        task_id="load_task",
+        python_callable=load_function,
     )
 
-    health_check_task >> extract_task >> transform_task >> update_task
+    health_check_task >> extract_task >> transform_task >> load_task

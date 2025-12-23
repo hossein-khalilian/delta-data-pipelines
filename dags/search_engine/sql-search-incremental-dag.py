@@ -115,10 +115,6 @@ def get_cursor():
     conn = pymssql.connect(**DB_CONFIG)
     return conn, conn.cursor(as_dict=True)
 
-def chunkify(data, size):
-    for i in range(0, len(data), size):
-        yield data[i:i + size]
-
 def safe_int(value):
     try:
         return int(float(value))
@@ -200,30 +196,34 @@ def get_time_function(**context):
     return fallback_dt
 
 
-def extract_function(**context):
-    last_run = context["ti"].xcom_pull(task_ids="get_time_task")
-
+def extract_function(ti, **context):
+    last_run = ti.xcom_pull(task_ids="get_time_task")
     conn, cursor = get_cursor()
-    cursor.execute(QUERY, (last_run,))
-    rows = cursor.fetchall()
-    conn.close()
+    try: 
+        cursor.execute(QUERY, (last_run,))
+        rows = cursor.fetchall()
 
-    logging.info(f"Extracted {len(rows)} rows from SQL Server")
-    return rows
+        logging.info(f"Extracted {len(rows)} rows from SQL Server")
+        ti.xcom_push(key="raw_rows", value=rows)
+
+        return None
+    finally:
+        conn.close()
 
 def to_camel_case(s):
     parts = s.split('_')
     return parts[0].lower() + ''.join(word.capitalize() for word in parts[1:])
 
-def transform_function(**context):
-    rows = context["ti"].xcom_pull(task_ids="extract_task")
+def transform_function(ti, **context):
+    rows = ti.xcom_pull(task_ids="extract_task", key="raw_rows")
     if not rows:
         logging.warning("No rows received from extract")
-        return []
+        ti.xcom_push(key="transformed_rows", value=[])
+        return
 
     tehran_tz = pytz.timezone("Asia/Tehran")
-    
     transformed = []
+    
     for row in rows:
         row_dict = dict(row)
         
@@ -279,35 +279,61 @@ def transform_function(**context):
         
     logging.info("Sample transformed: %s", json.dumps(transformed[:3], ensure_ascii=False))
     logging.info(f"Transformed {len(transformed)} records")
-    return transformed
+    
+    ti.xcom_push(key="transformed_rows", value=transformed)
 
-def load_function(**context):
-    data = context["ti"].xcom_pull(task_ids="transform_task")
-    if not data:
+    return None
+
+def load_function(ti, **context):
+    properties = ti.xcom_pull(task_ids="transform_task", key="transformed_rows")
+    if not properties:
         logging.info("No data to send")
         return None
 
-    for batch in chunkify(data, BATCH_SIZE):
-        payload = {
-            "properties": batch
-        }
-        response = requests.post(
-            ENDPOINT_URL,
-            data=json.dumps(payload, cls=DateTimeAndDecimalEncoder),
-            timeout=20
-        )
-        
-        if not response.ok:
-            logging.error(
-                "Failed to send batch. Status=%s Response=%s",
-                response.status_code,
-                response.text
+    total = len(properties)
+    total_batches = (total - 1) // BATCH_SIZE + 1
+    successful_batches = 0
+
+    logging.info("Total batch count = %s", total_batches)
+    
+    
+    for i in range(0, total, BATCH_SIZE):
+        batch = properties[i:i + BATCH_SIZE]
+        batch_num = i // BATCH_SIZE + 1
+        batch_count = len(batch)
+
+        logging.info("Sending batch %s/%s", batch_num, total_batches)
+
+        try:
+            response = requests.post(
+                ENDPOINT_URL,
+                json={
+                    "properties": batch,
+                    "batch_number": batch_num,
+                    "total_batches": total_batches,
+                },
+                timeout=60,
             )
 
-        response.raise_for_status()
+            if response.ok:
+                logging.info("Batch %s sent successfully | count=%s | status=%s",
+                             batch_num, batch_count, response.status_code)
+                successful_batches += 1
+                data = response.json()
+                logging.info(f"(response) added count: {data.get('added_count')}")    
+                logging.info(f"(response) message : {data.get('message')}") 
 
-    logging.info("All batches sent successfully")
-    return 
+            else:
+                logging.error("Batch %s failed | status=%s | response=%s",
+                              batch_num, response.status_code, response.text)
+                response.raise_for_status()     
+
+        except requests.exceptions.RequestException as e:
+            logging.error("Batch %s request failed: %s", batch_num, str(e))
+            raise 
+
+    logging.info("All batches completed | Total sent: %s properties in %s batches",
+                 total, successful_batches)
 
 # DAG
 with DAG(
