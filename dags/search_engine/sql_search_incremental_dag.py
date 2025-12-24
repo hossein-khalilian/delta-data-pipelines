@@ -42,6 +42,7 @@ d.Description,
 d.DepositCategoryId,
 d.PropertyTypeId,
 d.StatusId,
+d.UserId,
 d.CityId,
 d.RegionId,
 d.CreatedTime,
@@ -84,6 +85,7 @@ d.Description,
 dc.Link AS DepositCategoryId,
 bi.Title AS PropertyTypeId,
 d.StatusId,
+ur.RoleId AS UserroleId,
 d.CityId,
 r.Name AS RegionId,
 d.CreatedTime,
@@ -108,6 +110,8 @@ LEFT JOIN Regions r
 ON d.RegionId = r.Id
 LEFT JOIN PivotCustomFields p
 ON d.Id = p.DepositId
+LEFT JOIN usr.UserRoles ur
+ON d.UserId = ur.UserId
 ORDER BY d.Id DESC;
 """
 
@@ -261,6 +265,7 @@ def transform_function(ti, **context):
             "id": int(row_dict.get("Id")),
             "property_type": normalized_property_type,
             "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
+            "user_role_id":int(row_dict.get("UserroleId") or 13),
             "city_id": int(row_dict.get("CityId") or 0),
             "title": str(row_dict.get("Title") or ""),
             "created_time": created_time_utc,

@@ -1,5 +1,5 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator, ShortCircuitOperator
+from airflow.operators.python import PythonOperator
 from datetime import datetime
 import pytz
 import requests
@@ -32,6 +32,7 @@ d.Description,
 d.DepositCategoryId,
 d.PropertyTypeId,
 d.StatusId,
+d.UserId,
 d.CityId,
 d.RegionId,
 d.Createdtime,
@@ -74,6 +75,7 @@ d.Description,
 dc.Link AS DepositCategoryId,
 bi.Title AS PropertyTypeId,
 d.StatusId,
+ur.RoleId AS UserId,
 d.CityId,
 r.Name AS RegionId,
 d.CreatedTime,
@@ -98,6 +100,8 @@ LEFT JOIN Regions r
 ON d.RegionId = r.Id
 LEFT JOIN PivotCustomFields p
 ON d.Id = p.DepositId
+LEFT JOIN usr.UserRoles ur
+ON d.UserId = ur.UserId
 ORDER BY d.Id DESC;
 """
 
@@ -111,7 +115,6 @@ def get_cursor():
         database=DB_CONFIG["database"],
         login_timeout=30,
         timeout=300,
-        autocommit=True
     )
     return conn, conn.cursor(as_dict=True)
 
@@ -162,19 +165,28 @@ def health_check_function(**context):
     try:
         response = requests.get(ENDPOINT_HEALTH, timeout=30)
         if response.status_code == 200:
-            logging.info( response.status_code)
-            return True
+            logging.info("Search service health check passed | status=%s", response.status_code)
+            return
         else:
-            logging.error("Health check failed: status=%s, response=%s", response.status_code, response.text)
-            return False
+            logging.error(
+                "Health check failed | status=%s | response=%s",
+                response.status_code,
+                response.text,
+            )
+            raise RuntimeError("Search service health check failed")
     except Exception as e:
         logging.error("Health check connection failed: %s", str(e))
-        return False
-
+        raise
+    
 def extract_function(ti, **context):
+    
+    health_check_function()
+    
     conn, cursor = get_cursor()
     try:
+        logging.info("Executing SQL query...")
         cursor.execute(QUERY)
+        logging.info("SQL query executed")
         rows = cursor.fetchall()
         row_count = len(rows)
         
@@ -227,6 +239,7 @@ def transform_function(ti, **context):
             "id": int(row_dict.get("Id")),
             "property_type": normalized_property_type,
             "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
+            "user_role_id":int(row_dict.get("UserId") or 13),
             "city_id": int(row_dict.get("CityId") or 0),
             "title": str(row_dict.get("Title") or ""),
             "created_time": created_time_utc,
@@ -316,11 +329,6 @@ with DAG(
     tags=["search-engine", "db-update", "nightly"],
 ) as dag:
     
-    health_check_task = ShortCircuitOperator(
-        task_id="health_check_task",
-        python_callable=health_check_function,
-    )
-
     extract_task = PythonOperator(
         task_id="extract_task",
         python_callable=extract_function,
@@ -336,4 +344,4 @@ with DAG(
         python_callable=load_function,
     )
 
-    health_check_task >> extract_task >> transform_task >> load_task
+    extract_task >> transform_task >> load_task
