@@ -77,6 +77,13 @@ FROM CustomFieldValues cfv
 LEFT JOIN CustomFieldOptions cfo
 ON cfv.CustomFieldOptionId = cfo.Id
 GROUP BY cfv.DepositId
+),
+MinUserRole AS (
+    SELECT
+        UserId,
+        MIN(RoleId) AS RoleId
+    FROM usr.UserRoles
+    GROUP BY UserId
 )
 SELECT
 d.Id,
@@ -110,7 +117,7 @@ LEFT JOIN Regions r
 ON d.RegionId = r.Id
 LEFT JOIN PivotCustomFields p
 ON d.Id = p.DepositId
-LEFT JOIN usr.UserRoles ur
+LEFT JOIN MinUserRole ur
 ON d.UserId = ur.UserId
 ORDER BY d.Id DESC;
 """
@@ -321,6 +328,10 @@ def load_function(ti, **context):
                     "properties": batch,
                     "batch_number": batch_num,
                     "total_batches": total_batches,
+                },
+                headers = {
+                    "Authorization": f"Bearer {config["search_engine_access_token"]}",
+                    "accept": "/"
                 },
                 timeout=60,
             )
