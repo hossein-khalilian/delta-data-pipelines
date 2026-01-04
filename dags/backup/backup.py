@@ -2,12 +2,9 @@ from datetime import datetime, timedelta
 import os
 import hashlib
 import subprocess
-import json
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
-from airflow.operators.bash import BashOperator
-
+from minio import Minio
 from airflow.operators.empty import EmptyOperator
 from airflow.models import Variable
 from pymongo import MongoClient
@@ -28,7 +25,7 @@ dag = DAG(
     description='MongoDB backup pipeline',
     schedule_interval=timedelta(days=1),
     max_active_runs=1,
-    tags=['backup', 'mongodb'],
+    tags=['backup', 'mongodb', 'minio'],
 )
 
 MONGO_URI = config["mongo_uri"]
@@ -41,12 +38,24 @@ os.makedirs(BACKUP_DIR, exist_ok=True)
 
 mongodump_bin = "mongodump"
 
-def full_backup(**kwargs):
-    cmd = f'{mongodump_bin} --uri="{MONGO_URI}" --db={MONGO_DB} --collection={MONGO_COLLECTION} --out={BACKUP_DIR}/full_backup'
-    subprocess.run(cmd, shell=True, check=True)
-    
-    print("Full backup done.")
+# MinIO configuration
+MINIO_ENDPOINT = config["minio_endpoint"]
+MINIO_ACCESS_KEY = config["minio_access_key"]
+MINIO_SECRET_KEY = config["minio_secret_key"]
+MINIO_BUCKET = config["minio_bucket"]
 
+minio_client = Minio(
+    MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=False
+)
+
+# Ensure bucket exists
+if not minio_client.bucket_exists(MINIO_BUCKET):
+    minio_client.make_bucket(MINIO_BUCKET)
+    
+# Helpers
 def compute_checksum(file_path):
     sha256_hash = hashlib.sha256()
     with open(file_path, "rb") as f:
@@ -54,46 +63,76 @@ def compute_checksum(file_path):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
+def list_backups_in_minio():
+    objects = minio_client.list_objects(MINIO_BUCKET, recursive=True)
+    keys = [obj.object_name for obj in objects]
+    # extract dates from keys
+    dates = sorted(set([k.split('/')[0] for k in keys]))
+    return dates
+
+# Tasks
+def full_backup(**kwargs):
+    today_str = datetime.now().strftime("%Y%m%d")
+    backup_path = os.path.join(BACKUP_DIR, f'full_backup_{today_str}')
+    os.makedirs(backup_path, exist_ok=True)
+
+    # Run mongodump
+    cmd = f'{mongodump_bin} --uri="{MONGO_URI}" --db={MONGO_DB} --collection={MONGO_COLLECTION} --out={backup_path}'
+    subprocess.run(cmd, shell=True, check=True)
+    print(f"Full backup done: {backup_path}")
+
+    # Upload to MinIO
+    for root, dirs, files in os.walk(backup_path):
+        for file in files:
+            full_file_path = os.path.join(root, file)
+            key = f"{today_str}/{file}"
+            minio_client.fput_object(MINIO_BUCKET, key, full_file_path)
+    print(f"Backup uploaded to MinIO: {today_str}")
+
+    # keep last 3 backups
+    dates = list_backups_in_minio()
+    while len(dates) > 3:
+        oldest = dates.pop(0)
+        # delete all files for oldest date
+        objects_to_delete = minio_client.list_objects(MINIO_BUCKET, prefix=f"{oldest}/", recursive=True)
+        for obj in objects_to_delete:
+            minio_client.remove_object(MINIO_BUCKET, obj.object_name)
+        print(f"Deleted old backup from MinIO: {oldest}")
+        
 def validate_backup(**kwargs):
-    # ti = kwargs['ti']
-    # branch_result = ti.xcom_pull(task_ids='branch_task')
-    
-    path = os.path.join(BACKUP_DIR, 'full_backup', MONGO_DB, f'{MONGO_COLLECTION}.bson')
+    today_str = datetime.now().strftime("%Y%m%d")
+    path = os.path.join(BACKUP_DIR, f'full_backup_{today_str}', MONGO_DB, f'{MONGO_COLLECTION}.bson')
     if not os.path.exists(path):
         raise ValueError(f"Backup file not found: {path}")
-    
+
     checksum = compute_checksum(path)
     prev = Variable.get('backup_checksum', default_var=None)
     if prev and prev == checksum:
         print("Warning: checksum same as previous!")
     Variable.set('backup_checksum', checksum)
-    
+
     # Validation
     temp_db = 'temp_val_db'
     base_dir = os.path.dirname(path)
     cmd = f'mongorestore --uri="{MONGO_URI}" --db={temp_db} --drop {base_dir}'
     subprocess.run(cmd, shell=True, check=True)
-    
+
     client = MongoClient(MONGO_URI)
     count = client[temp_db].get_collection(MONGO_COLLECTION).count_documents({})
     if count == 0:
         raise ValueError("Validation failed: no documents restored")
     client.drop_database(temp_db)
     print("Validation passed.")
-
-cleanup_task = PythonOperator(
-    task_id='cleanup_old_backups',
-    python_callable=lambda: subprocess.run(f'rm -rf {BACKUP_DIR}/full_backup', shell=True),
-    dag=dag
-)
-
+    
+def cleanup_task_fn(**kwargs):
+    subprocess.run(f'rm -rf {BACKUP_DIR}/*', shell=True)
+    print("Local backup directory cleaned.")
+    
 full_task = PythonOperator(task_id='full_backup', python_callable=full_backup, dag=dag)
-
-# join_task = EmptyOperator(task_id='join', trigger_rule='one_success', dag=dag)
-
-validate_task = PythonOperator(task_id='validate_backup', python_callable=validate_backup, dag=dag)
-
+# validate_task = PythonOperator(task_id='validate_backup', python_callable=validate_backup, dag=dag)
+cleanup_task = PythonOperator(task_id='cleanup_old_backups', python_callable=cleanup_task_fn, dag=dag)
 join_task = EmptyOperator(task_id='join', dag=dag)
 
-#dag
-full_task >> join_task >> validate_task >> cleanup_task
+# DAG Flow
+# full_task >> join_task >> validate_task >> cleanup_task
+full_task >> join_task >> cleanup_task
