@@ -11,10 +11,10 @@ RUN apt-get update && apt-get install -y \
     tar \
     && rm -rf /var/lib/apt/lists/*
 
-# Install MongoDB Database Tools (mongodump)
+# Install MongoDB Database Tools (mongodump + mongorestore)
 RUN wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.9.4.tgz \
     && tar -xzf mongodb-database-tools-ubuntu2204-x86_64-100.9.4.tgz \
-    && cp mongodb-database-tools-*/bin/mongodump /usr/local/bin/ \
+    && cp mongodb-database-tools-*/bin/* /usr/local/bin/ \
     && rm -rf mongodb-database-tools-*
 
 USER airflow

@@ -99,40 +99,84 @@ def full_backup(**kwargs):
             minio_client.remove_object(MINIO_BUCKET, obj.object_name)
         print(f"Deleted old backup from MinIO: {oldest}")
         
+# def validate_backup(**kwargs):
+#     today_str = datetime.now().strftime("%Y%m%d")
+#     path = os.path.join(BACKUP_DIR, f'full_backup_{today_str}', MONGO_DB, f'{MONGO_COLLECTION}.bson')
+#     if not os.path.exists(path):
+#         raise ValueError(f"Backup file not found: {path}")
+
+#     checksum = compute_checksum(path)
+#     prev = Variable.get('backup_checksum', default_var=None)
+#     if prev and prev == checksum:
+#         print("Warning: checksum same as previous!")
+#     Variable.set('backup_checksum', checksum)
+
+#     # Validation
+#     temp_db = 'temp_val_db'
+#     base_dir = os.path.dirname(path)
+#     cmd = f'mongorestore --uri="{MONGO_URI}" --db={temp_db} --drop {base_dir}'
+#     subprocess.run(cmd, shell=True, check=True)
+
+#     client = MongoClient(MONGO_URI)
+#     count = client[temp_db].get_collection(MONGO_COLLECTION).count_documents({})
+#     if count == 0:
+#         raise ValueError("Validation failed: no documents restored")
+#     client.drop_database(temp_db)
+#     print("Validation passed.")
 def validate_backup(**kwargs):
     today_str = datetime.now().strftime("%Y%m%d")
     path = os.path.join(BACKUP_DIR, f'full_backup_{today_str}', MONGO_DB, f'{MONGO_COLLECTION}.bson')
+    
     if not os.path.exists(path):
         raise ValueError(f"Backup file not found: {path}")
-
+    
     checksum = compute_checksum(path)
     prev = Variable.get('backup_checksum', default_var=None)
     if prev and prev == checksum:
         print("Warning: checksum same as previous!")
     Variable.set('backup_checksum', checksum)
-
-    # Validation
-    temp_db = 'temp_val_db'
-    base_dir = os.path.dirname(path)
-    cmd = f'mongorestore --uri="{MONGO_URI}" --db={temp_db} --drop {base_dir}'
-    subprocess.run(cmd, shell=True, check=True)
-
+    
+    # Validation 
+    restore_collection = "divar-dataset_1_restore"
     client = MongoClient(MONGO_URI)
-    count = client[temp_db].get_collection(MONGO_COLLECTION).count_documents({})
+    db = client[MONGO_DB]
+    
+    if restore_collection in db.list_collection_names():
+        db[restore_collection].delete_many({}) 
+    
+    # mongorestore
+    cmd = (
+        f'mongorestore --uri="{MONGO_URI}" '
+        f'--db={MONGO_DB} '
+        f'--collection={restore_collection} '
+        f'--noIndexRestore '
+        f'{path}'
+    )
+    
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print("mongorestore error output:")
+        print(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+    
+    count = db[restore_collection].count_documents({})
+    print(f"Restored documents count in {restore_collection}: {count}")
+    
     if count == 0:
         raise ValueError("Validation failed: no documents restored")
-    client.drop_database(temp_db)
-    print("Validation passed.")
+    
+    print(f"Validation passed. Data is available in collection: {restore_collection}")
+    print("کالکشن divar-dataset_1_restore پاک نمی‌شود و می‌توانید آن را مشاهده کنید.")
     
 def cleanup_task_fn(**kwargs):
     subprocess.run(f'rm -rf {BACKUP_DIR}/*', shell=True)
     print("Local backup directory cleaned.")
     
 full_task = PythonOperator(task_id='full_backup', python_callable=full_backup, dag=dag)
-# validate_task = PythonOperator(task_id='validate_backup', python_callable=validate_backup, dag=dag)
+validate_task = PythonOperator(task_id='validate_backup', python_callable=validate_backup, dag=dag)
 cleanup_task = PythonOperator(task_id='cleanup_old_backups', python_callable=cleanup_task_fn, dag=dag)
-join_task = EmptyOperator(task_id='join', dag=dag)
 
 # DAG Flow
-# full_task >> join_task >> validate_task >> cleanup_task
-full_task >> join_task >> cleanup_task
+full_task >> validate_task >> cleanup_task
+# full_task >> cleanup_task
