@@ -98,31 +98,7 @@ def full_backup(**kwargs):
         for obj in objects_to_delete:
             minio_client.remove_object(MINIO_BUCKET, obj.object_name)
         print(f"Deleted old backup from MinIO: {oldest}")
-        
-# def validate_backup(**kwargs):
-#     today_str = datetime.now().strftime("%Y%m%d")
-#     path = os.path.join(BACKUP_DIR, f'full_backup_{today_str}', MONGO_DB, f'{MONGO_COLLECTION}.bson')
-#     if not os.path.exists(path):
-#         raise ValueError(f"Backup file not found: {path}")
-
-#     checksum = compute_checksum(path)
-#     prev = Variable.get('backup_checksum', default_var=None)
-#     if prev and prev == checksum:
-#         print("Warning: checksum same as previous!")
-#     Variable.set('backup_checksum', checksum)
-
-#     # Validation
-#     temp_db = 'temp_val_db'
-#     base_dir = os.path.dirname(path)
-#     cmd = f'mongorestore --uri="{MONGO_URI}" --db={temp_db} --drop {base_dir}'
-#     subprocess.run(cmd, shell=True, check=True)
-
-#     client = MongoClient(MONGO_URI)
-#     count = client[temp_db].get_collection(MONGO_COLLECTION).count_documents({})
-#     if count == 0:
-#         raise ValueError("Validation failed: no documents restored")
-#     client.drop_database(temp_db)
-#     print("Validation passed.")
+ 
 def validate_backup(**kwargs):
     today_str = datetime.now().strftime("%Y%m%d")
     path = os.path.join(BACKUP_DIR, f'full_backup_{today_str}', MONGO_DB, f'{MONGO_COLLECTION}.bson')
