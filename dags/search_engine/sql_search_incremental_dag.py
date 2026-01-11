@@ -1,14 +1,14 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import json
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 import pytz
-import pymssql
 import requests
 import logging
 from utils.config import config
 import json
+
+from search_engine.utils.utils_of_searchengine import get_cursor, safe_int, age_to_build_year, normalize_property_type
 
 class DateTimeAndDecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -23,14 +23,6 @@ START_TIME_VAR = "last_successful_run"
 DEFAULT_START_TIME = (datetime.now() - timedelta(days=1)).replace(microsecond=0).isoformat()
 ENDPOINT_URL = (f"{config["search_endpoint_url"]}/add-properties")
 BATCH_SIZE = 200
-
-DB_CONFIG = {
-    "server": config.get('sql_host'),
-    "port": config.get('sql_port'),
-    "database": config.get('sql_name'),
-    "user": config.get('sql_user'),
-    "password": config.get('sql_password'),
-}
 
 # query
 QUERY = """
@@ -121,57 +113,6 @@ LEFT JOIN MinUserRole ur
 ON d.UserId = ur.UserId
 ORDER BY d.Id DESC;
 """
-
-def get_cursor():
-    conn = pymssql.connect(**DB_CONFIG)
-    return conn, conn.cursor(as_dict=True)
-
-def safe_int(value):
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return 0
-    
-def age_to_build_year(age):
-    try:
-        age = int(age)
-    except Exception:
-        return None
-
-    current_gyear = datetime.now().year
-    current_jyear = current_gyear - 621  
-    if age > 30:
-        return current_jyear - 31
-    elif age > 20:
-        return current_jyear - 21
-    else:
-        return 1404
-    
-def normalize_property_type(property_type):
-    if not property_type:
-        return None
-
-    pt = str(property_type).strip()
-
-    if "مشارکت" in pt:
-        return None  
-
-    if "زمین" in pt:
-        return "باغ باغچه و زمین"
-
-    if "صنعتی" in pt or "زراعی" in pt:
-        return "باغ باغچه و زمین"
-
-    allowed = {
-        "آپارتمان مسکونی",
-        "آپارتمان اداری",
-        "خانه - ویلا",
-        "مغازه - تجاری",
-        "مستغلات",
-        "باغ باغچه و زمین",
-    }
-
-    return pt if pt in allowed else pt
 
 # TASKS
 def get_time_function(**context):
