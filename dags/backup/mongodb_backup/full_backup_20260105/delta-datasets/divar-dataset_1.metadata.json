@@ -1,1 +1,0 @@
-{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"content_url":{"$numberInt":"1"}},"name":"content_url_1","unique":true,"sparse":true}],"uuid":"52f7f7e0c0134bf7b84261ba553ea039","collectionName":"divar-dataset_1","type":"collection"}
