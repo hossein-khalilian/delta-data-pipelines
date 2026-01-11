@@ -5,11 +5,20 @@ import subprocess
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from minio import Minio
-from airflow.operators.empty import EmptyOperator
 from airflow.models import Variable
 from pymongo import MongoClient
 from utils.config import config
+import yaml
 
+# from utils.utils_of_backup import 
+
+CONFIG_PATH = "/opt/airflow/dags/web_scraping/websites.yaml"
+
+with open(CONFIG_PATH, "r") as f:
+    yaml_config = yaml.safe_load(f)
+
+site_names = [site["name"] for site in yaml_config["websites"]]
+    
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
@@ -31,7 +40,8 @@ dag = DAG(
 MONGO_URI = config["mongo_uri"]
 MONGO_DB = config["mongo_db"]
 #.yaml
-MONGO_COLLECTION = "divar-dataset_1"
+COLLECTIONS = config["mongo_collection"] 
+MONGO_COLLECTION = [f"{name}-{COLLECTIONS}" for name in site_names]
 
 BACKUP_DIR = './git/delta-data-pipelines/dags/backup/mongodb_backup'
 os.makedirs(BACKUP_DIR, exist_ok=True)
@@ -77,8 +87,16 @@ def full_backup(**kwargs):
     os.makedirs(backup_path, exist_ok=True)
 
     # Run mongodump
-    cmd = f'{mongodump_bin} --uri="{MONGO_URI}" --db={MONGO_DB} --collection={MONGO_COLLECTION} --out={backup_path}'
-    subprocess.run(cmd, shell=True, check=True)
+    for col in MONGO_COLLECTION:
+        cmd = (
+            f'{mongodump_bin} '
+            f'--uri="{MONGO_URI}" '
+            f'--db="{MONGO_DB}" '
+            f'--collection="{col}" '
+            f'--out="{backup_path}"'
+        )
+        subprocess.run(cmd, shell=True, check=True)
+
     print(f"Full backup done: {backup_path}")
 
     # Upload to MinIO
@@ -101,17 +119,25 @@ def full_backup(**kwargs):
  
 def validate_backup(**kwargs):
     today_str = datetime.now().strftime("%Y%m%d")
-    path = os.path.join(BACKUP_DIR, f'full_backup_{today_str}', MONGO_DB, f'{MONGO_COLLECTION}.bson')
+    base_path = os.path.join(
+        BACKUP_DIR,
+        f'full_backup_{today_str}',
+        MONGO_DB
+    )
+
+    for col in MONGO_COLLECTION:
+        path = os.path.join(base_path, f"{col}.bson")
+        if not os.path.exists(path):
+            raise ValueError(f"Backup file not found: {path}")
     
-    if not os.path.exists(path):
-        raise ValueError(f"Backup file not found: {path}")
-    
-    checksum = compute_checksum(path)
+    checksum = compute_checksum(os.path.join(base_path, f"{MONGO_COLLECTION[0]}.bson"))
     prev = Variable.get('backup_checksum', default_var=None)
+
     if prev and prev == checksum:
         print("Warning: checksum same as previous!")
+
     Variable.set('backup_checksum', checksum)
-    
+
     # Validation 
     restore_collection = "divar-dataset_1_restore"
     client = MongoClient(MONGO_URI)
@@ -143,7 +169,6 @@ def validate_backup(**kwargs):
         raise ValueError("Validation failed: no documents restored")
     
     print(f"Validation passed. Data is available in collection: {restore_collection}")
-    print("کالکشن divar-dataset_1_restore پاک نمی‌شود و می‌توانید آن را مشاهده کنید.")
     
 def cleanup_task_fn(**kwargs):
     subprocess.run(f'rm -rf {BACKUP_DIR}/*', shell=True)
