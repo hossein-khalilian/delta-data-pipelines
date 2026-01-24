@@ -7,11 +7,13 @@ from airflow.exceptions import AirflowFailException
 from minio import Minio
 from pymongo import MongoClient
 from utils.config import config
+import gzip
 
 # -------------------- CONFIG --------------------
 MONGO_URI = config["mongo_uri"]
 MONGO_DB = config["mongo_db"]
-TMP_RESTORE_DB = f"{MONGO_DB}_validation"
+# TMP_RESTORE_DB = f"{MONGO_DB}-restore"
+RESTORE_DB = "datasets-restore" 
 
 BACKUP_DIR = "./delta-data-pipelines/dags/backup/mongodb_backup"
 
@@ -44,7 +46,7 @@ default_args = {
 }
 
 dag = DAG(
-    "mongodb_full_backup_dag",
+    "mongodb_full_backup",
     default_args=default_args,
     schedule_interval=timedelta(days=1),
     max_active_runs=1,
@@ -85,27 +87,27 @@ def full_backup(**context):
     context["ti"].xcom_push(key="backup_date", value=backup_date)
 
 def validate_backup(**context):
-    if TMP_RESTORE_DB == MONGO_DB:
-        raise AirflowFailException("Validation DB must NOT be production DB")
-        
-    if not TMP_RESTORE_DB.endswith("_validation"):
-        raise AirflowFailException("Validation DB name must end with '_validation'")
-        
     backup_date = context["ti"].xcom_pull(key="backup_date")
     local_backup_path = os.path.join(BACKUP_DIR, backup_date)
 
     client = MongoClient(MONGO_URI)
     source_db = client[MONGO_DB]
+    restore_db = client[RESTORE_DB]
+
+    print(f"Clearing existing collections in {RESTORE_DB} before restore...")
+    for col in restore_db.list_collection_names():
+        restore_db.drop_collection(col)
 
     # if TMP_RESTORE_DB in client.list_database_names():
-        # client.drop_database(TMP_RESTORE_DB)
+    #     client.drop_database(TMP_RESTORE_DB) # خط حذف دیتابیس حذف شد
 
+    # به‌روزرسانی دستور mongorestore برای استفاده از RESTORE_DB
     cmd = (
         f'{mongorestore_bin} '
         f'--uri="{MONGO_URI}" '
         f'--gzip '
         f'--nsFrom="{MONGO_DB}.*" '
-        # f'--nsTo="{TMP_RESTORE_DB}.*" '
+        f'--nsTo="{RESTORE_DB}.*" '
         f'"{local_backup_path}"'
     )
 
@@ -113,17 +115,54 @@ def validate_backup(**context):
     if result.returncode != 0:
         raise AirflowFailException(result.stderr)
 
-    restored_db = client[TMP_RESTORE_DB]
+    restored_db = client[RESTORE_DB]
 
-    # src_cols = set(source_db.list_collection_names())
-    # restored_cols = set(restored_db.list_collection_names())
+    src_cols = set(source_db.list_collection_names())
+    restored_cols = set(restored_db.list_collection_names())
 
-    # if src_cols != restored_cols:
-    #     raise AirflowFailException("Collection count mismatch")
+    if src_cols != restored_cols:
+        raise AirflowFailException("Collection count mismatch")
 
-    # for col in restored_cols:
-    #     if restored_db[col].count_documents({}) < 1:
-    #         raise AirflowFailException(f"Collection {col} is empty")
+    for col in restored_cols:
+        if restored_db[col].count_documents({}) < 1:
+            raise AirflowFailException(f"Collection {col} is empty")
+
+# def validate_backup(**context):
+#     backup_date = context["ti"].xcom_pull(key="backup_date")
+#     backup_path = os.path.join(BACKUP_DIR, backup_date)
+
+#     if not os.path.exists(backup_path):
+#         raise AirflowFailException("Backup path does not exist")
+
+#     files = []
+#     for root, _, fs in os.walk(backup_path):
+#         for f in fs:
+#             files.append(os.path.join(root, f))
+
+#     if not files:
+#         raise AirflowFailException("Backup directory is empty")
+
+#     bson_files = [f for f in files if f.endswith(".bson.gz")]
+#     meta_files = [f for f in files if f.endswith(".metadata.json.gz")]
+
+#     if not bson_files:
+#         raise AirflowFailException("No .bson.gz files found")
+
+#     if not meta_files:
+#         raise AirflowFailException("No metadata (.metadata.json.gz) files found")
+
+#     for f in bson_files[:3]: 
+#         try:
+#             with gzip.open(f, "rb") as g:
+#                 g.read(1024)
+#         except Exception:
+#             raise AirflowFailException(f"Corrupted gzip file: {f}")
+
+#     print(
+#         f"Validation passed: "
+#         f"{len(bson_files)} bson files, "
+#         f"{len(meta_files)} metadata files"
+#     )
 
 def cleanup_task(**context):
     backup_date = context["ti"].xcom_pull(key="backup_date")
