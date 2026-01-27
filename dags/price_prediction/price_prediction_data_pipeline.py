@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 import pandas as pd
 import requests
-# from pymongo import MongoClient
+from pymongo import MongoClient
 from minio import Minio
 from minio.error import S3Error
 from utils.config import config
@@ -19,9 +19,9 @@ MINIO_PRICE_PREDICTION_BUCKET = config["minio_price_prediction_bucket"]
 
 MONGO_URI = config["mongo_uri"]
 MONGO_DB = config["mongo_db"]
-# MONGO_COLLECTION_ENV = config["mongo_collection"]
-# MONGO_COLLECTION = f'divar-{MONGO_COLLECTION_ENV}'
-MONGO_COLLECTION = "divar-dataset"
+MONGO_COLLECTION_ENV = config["mongo_collection"]
+MONGO_COLLECTION = f'divar-{MONGO_COLLECTION_ENV}'
+# MONGO_COLLECTION = "divar-dataset"
 
 ANALYTICS_ENDPOINT_URL = f"{config['analytics_endpoint_url']}/api/v1/update-model"
 ANALYTICS_ENDPOINT_ACCESS_TOKEN = config["analytics_endpoint_access_token"]
@@ -43,36 +43,51 @@ def get_minio_client():
         secure=False,
     )
 
-def extract_from_mongo(**context):
+def extract_function(**context):
     os.makedirs(TMP_DIR, exist_ok=True)
 
-    print(f"[extract] TMP_DIR ensured: {TMP_DIR}")
+    try:
+        print(f"TMP_DIR ensured: {TMP_DIR}")
+        
+        # get fields
+        client = MongoClient(MONGO_URI)
+        db = client[MONGO_DB]
+        collection = db[MONGO_COLLECTION]
+        
+        sample_doc = collection.find_one()
+        if not sample_doc:
+            raise AirflowFailException("Mongo collection is empty")
+        
+        EXCLUDED_FIELDS = ['_id', 'created_at', 'post_token', 'content_url', 'images']
+        # EXCLUDED_FIELDS = ['_id', 'created_at', 'post_token', 'content_url']
+
+        fields = [key for key in sample_doc.keys() if key not in EXCLUDED_FIELDS]
+        
+        print(f"Found {len(fields)} fields after excluding {EXCLUDED_FIELDS}")
+        # print(f"[extract] First 10 fields: {fields[:10]}")
+        # print(f"[extract] Last 10 fields: {fields[-10:]}")
+            
+        fields_file = f"{TMP_DIR}/fields.txt"
+        with open(fields_file, 'w') as f:
+            for field in fields:
+                f.write(f"{field}\n")
+        
+        client.close()
+        
+    except Exception as e:
+        print(f"[extract] Error connecting to MongoDB: {e}")
+        raise AirflowFailException("Failed to connect to MongoDB")
     
     cmd = [
         "mongoexport",
         f"--uri={MONGO_URI}",
         f"--db={MONGO_DB}",
         f"--collection={MONGO_COLLECTION}",
-        # "--type=json",
-        # "--jsonArray=false",
         "--type=csv",
-        "--fields=cat_1,cat_2",
+        f"--fieldFile={fields_file}",
         f"--out={LOCAL_CSV}",
-        # f"--out={LOCAL_CSV}.json",
     ]
     
-    # client = MongoClient(MONGO_URI)
-    # db = client[MONGO_DB]
-    # collection = db[MONGO_COLLECTION]
-
-    # data = list(collection.find({}, {"_id": 0}))
-    # if not data:
-    #     raise AirflowFailException("Mongo collection is empty")
-
-    # df = pd.DataFrame(data)
-    # df.to_csv(LOCAL_CSV, index=False)
-
-    # print(f"Extracted {len(df)} rows from MongoDB")
     print(f"[extract] Running mongoexport...")
     result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -82,45 +97,19 @@ def extract_from_mongo(**context):
     else:
         print(f"[extract] mongoexport succeeded. File created at {LOCAL_CSV}")
 
-# def transform_data(**context):
-#     df = pd.read_csv(LOCAL_CSV)
-#     print(f"[transform] CSV loaded, {len(df)} rows")
-
-#     df = df[df['cat3_slug'] == 'apartment-sell'].copy()
-#     print(f"[transform] Filtered cat3_slug=='apartment-sell', {len(df)} rows remain")
-    
-#     drop_cols = (
-#         ['_id', 'created_at', 'post_token', 'content_url'] +
-#         [f"images[{i}]" for i in range(21)]
-#     )
-
-#     df.drop(columns=[c for c in drop_cols if c in df.columns], inplace=True)
-#     print(f"[transform] Dropped unnecessary columns, {len(df.columns)} columns remain")
-
-#     if 'construction_year' in df.columns:
-#         df['construction_year'] = df['construction_year'].replace(-1370, 1369)
-
-#     df.to_csv(LOCAL_CSV, index=False)
-#     print(f"[transform] Transformation completed. File saved at {LOCAL_CSV}")
-    
-#     if df.empty:
-#         raise AirflowFailException(
-#             "No data left after filtering cat3_slug == apartment-sell"
-#         )
-def transform_data(**context):
+def transform_function(**context):
     chunksize = 50000  
     processed_chunks = 0
     total_rows = 0
 
     tmp_transformed_csv = f"{LOCAL_CSV}.tmp"
 
-    # اگر فایل tmp وجود داشت، پاکش کن
     if os.path.exists(tmp_transformed_csv):
         os.remove(tmp_transformed_csv)
 
     print(f"[transform] Starting transformation in chunks...")
 
-    for chunk in pd.read_json(f"{LOCAL_CSV}.json", lines=True, chunksize=chunksize):
+    for chunk in pd.read_csv(LOCAL_CSV, chunksize=chunksize):
         print(f"[transform] Processing chunk with {len(chunk)} rows")
         if 'cat3_slug' not in chunk.columns:
             print("[transform] cat3_slug not found in this chunk, skipping")
@@ -128,17 +117,9 @@ def transform_data(**context):
     
         chunk = chunk[chunk['cat3_slug'] == 'apartment-sell'].copy()
 
-        drop_cols = (
-            # ['_id', 'created_at', 'post_token', 'content_url']
-            ['_id', 'created_at', 'post_token', 'content_url'] +
-            [f"images[{i}]" for i in range(21)]
-        )
-        chunk.drop(columns=[c for c in drop_cols if c in chunk.columns], inplace=True)
-
         if 'construction_year' in chunk.columns:
             chunk['construction_year'] = chunk['construction_year'].replace(-1370, 1369)
 
-        # append to tmp CSV
         if os.path.exists(tmp_transformed_csv):
             chunk.to_csv(tmp_transformed_csv, index=False, mode='a', header=False)
         else:
@@ -148,7 +129,6 @@ def transform_data(**context):
         total_rows += len(chunk)
         print(f"[transform] Chunk processed, {len(chunk)} rows kept")
 
-    # جایگزین کردن CSV اصلی با CSV پردازش شده
     os.replace(tmp_transformed_csv, LOCAL_CSV)
     print(f"[transform] Transformation completed. Total rows after filter: {total_rows}")
 
@@ -157,7 +137,7 @@ def transform_data(**context):
             "No data left after filtering cat3_slug == apartment-sell"
         )
 
-def upload_to_minio(**context):
+def load_function(**context):
     minio_client = get_minio_client()
     bucket = MINIO_PRICE_PREDICTION_BUCKET
 
@@ -196,18 +176,25 @@ def upload_to_minio(**context):
 
     print("[upload] New data uploaded to last-data")
 
-def validate_upload(**context):
+def validate_function(**context):
     minio_client = get_minio_client()
     bucket = MINIO_PRICE_PREDICTION_BUCKET
 
     try:
-        minio_client.stat_object(bucket, LAST_DATA_PATH)
-        print("[validate] Upload validation successful")
-    except S3Error:
-        raise AirflowFailException("Upload validation failed")
-
-
-def call_model_endpoint(**context):
+        obj_info = minio_client.stat_object(bucket, LAST_DATA_PATH)
+        
+        if obj_info.size == 0:
+            raise AirflowFailException("Uploaded file is empty (0 bytes)")
+            
+        print(f"[validate] Upload validation successful - File size: {obj_info.size} bytes")
+        
+    except S3Error as e:
+        if e.code == "NoSuchKey":
+            raise AirflowFailException(f"File {LAST_DATA_PATH} not found in MinIO")
+        else:
+            raise AirflowFailException(f"MinIO error: {e.message}")
+        
+def call_model_function(**context):
     url = ANALYTICS_ENDPOINT_URL
 
     headers = {
@@ -224,14 +211,68 @@ def call_model_endpoint(**context):
     print(f"[call_model] Endpoint response status: {response.status_code}")
     print(f"[call_model] Endpoint response body: {response.text}")
 
-    response.raise_for_status()
+    # بررسی status code
+    if response.status_code != 200:
+        raise AirflowFailException(f"Endpoint returned status: {response.status_code}")
 
     try:
-        metrics = response.json()
-        print("Model training metrics:")
-        print(metrics)
+        result = response.json()
+        print("Model training result:")
+        print(result)
+        
+        # بررسی success flag
+        if isinstance(result, dict) and result.get('success') is False:
+            error_msg = result.get('message', 'Training failed')
+            
+            # ✅ **حذف دیتای جدید و بازگرداندن دیتای قدیم**
+            try:
+                minio_client = get_minio_client()
+                bucket = MINIO_PRICE_PREDICTION_BUCKET
+                
+                # 1. حذف last-data جدید
+                try:
+                    minio_client.remove_object(bucket, LAST_DATA_PATH)
+                    print("[call_model] Removed new last-data (training failed)")
+                except S3Error as e:
+                    if e.code != "NoSuchKey":
+                        print(f"[call_model] Warning: Could not remove last-data: {e}")
+                
+                # 2. برگرداندن old-data به last-data
+                old_key = f"{OLD_DATA_PREFIX}/{CSV_NAME}"
+                try:
+                    # بررسی وجود old-data
+                    minio_client.stat_object(bucket, old_key)
+                    
+                    source = CopySource(
+                        bucket_name=bucket,
+                        object_name=old_key,
+                    )
+                    
+                    minio_client.copy_object(
+                        bucket,
+                        LAST_DATA_PATH,
+                        source,
+                    )
+                    
+                    print("[call_model] Restored old-data to last-data")
+                    
+                except S3Error as e:
+                    if e.code == "NoSuchKey":
+                        print("[call_model] Warning: No old-data found to restore")
+                    else:
+                        print(f"[call_model] Warning: Could not restore old-data: {e}")
+                
+            except Exception as e:
+                print(f"[call_model] Error during rollback: {e}")
+            
+            raise AirflowFailException(f"Model training failed: {error_msg}")
+            
+        # اگر success: true بود
+        if isinstance(result, dict) and result.get('success') is True:
+            print("✅ Model training completed successfully")
+            
     except ValueError:
-        print("Response is not JSON")
+        raise AirflowFailException("Response is not valid JSON")
 
 with DAG(
     dag_id="price_prediction",
@@ -242,28 +283,28 @@ with DAG(
 ) as dag:
 
     extract_task = PythonOperator(
-        task_id="extract_from_mongo",
-        python_callable=extract_from_mongo,
+        task_id="extract_task",
+        python_callable=extract_function,
     )
 
     transform_task = PythonOperator(
-        task_id="transform_data",
-        python_callable=transform_data,
+        task_id="transform_task",
+        python_callable=transform_function,
     )
 
     load_task = PythonOperator(
-        task_id="upload_to_minio",
-        python_callable=upload_to_minio,
+        task_id="load_task",
+        python_callable=load_function,
     )
 
     validate_task = PythonOperator(
-        task_id="validate_upload",
-        python_callable=validate_upload,
+        task_id="validate_task",
+        python_callable=validate_function,
     )
 
     call_model = PythonOperator(
-        task_id="call_model_endpoint",
-        python_callable=call_model_endpoint,
+        task_id="call_model",
+        python_callable=call_model_function,
     )
 
     extract_task >> transform_task >> load_task >> validate_task >> call_model
