@@ -21,7 +21,7 @@ class DateTimeAndDecimalEncoder(json.JSONEncoder):
 # config
 START_TIME_VAR = "last_successful_run"
 DEFAULT_START_TIME = (datetime.now() - timedelta(days=1)).replace(microsecond=0).isoformat()
-ENDPOINT_URL = (f"{config["search_endpoint_url"]}/add-properties")
+ENDPOINT_URL = (f"{config["search_engine_endpoint_url"]}/add-properties")
 BATCH_SIZE = 200
 
 # query

@@ -9,8 +9,8 @@ from utils.config import config
 from search_engine.utils.utils_of_searchengine import get_cursor, safe_int, age_to_build_year, normalize_property_type
 
 # config
-ENDPOINT_UPDATE_ALL = f"{config['search_endpoint_url']}/update-all-properties"
-ENDPOINT_HEALTH = f"{config['search_endpoint_url']}/health"
+ENDPOINT_UPDATE_ALL = f"{config['search_engine_endpoint_url']}/update-all-properties"
+ENDPOINT_HEALTH = f"{config['search_engine_endpoint_url']}/health"
 BATCH_SIZE = 200
 
 # query

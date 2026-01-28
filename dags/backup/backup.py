@@ -7,20 +7,19 @@ from airflow.exceptions import AirflowFailException
 from minio import Minio
 from pymongo import MongoClient
 from utils.config import config
-import gzip
 
-# -------------------- CONFIG --------------------
+# CONFIG 
 MONGO_URI = config["mongo_uri"]
+MONGO_URI_RESTORE = config["mongo_uri_restore"]
 MONGO_DB = config["mongo_db"]
-# TMP_RESTORE_DB = f"{MONGO_DB}-restore"
-RESTORE_DB = "datasets-restore" 
+MONGO_DB_RESTORE = config["mongo_db_restore"]
 
 BACKUP_DIR = "./delta-data-pipelines/dags/backup/mongodb_backup"
 
 MINIO_ENDPOINT = config["minio_endpoint"]
 MINIO_ACCESS_KEY = config["minio_access_key"]
 MINIO_SECRET_KEY = config["minio_secret_key"]
-MINIO_BUCKET = config["minio_bucket"]
+MINIO_BACKUP_BUCKET = config["minio_backup_bucket"]
 
 mongodump_bin = "mongodump"
 mongorestore_bin = "mongorestore"
@@ -34,10 +33,10 @@ minio_client = Minio(
     secure=False,
 )
 
-if not minio_client.bucket_exists(MINIO_BUCKET):
-    minio_client.make_bucket(MINIO_BUCKET)
+if not minio_client.bucket_exists(MINIO_BACKUP_BUCKET):
+    minio_client.make_bucket(MINIO_BACKUP_BUCKET)
 
-# -------------------- DAG --------------------
+# DAG 
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
@@ -48,18 +47,19 @@ default_args = {
 dag = DAG(
     "mongodb_full_backup",
     default_args=default_args,
-    schedule_interval=timedelta(days=1),
+    schedule_interval="@weekly",
     max_active_runs=1,
     tags=["mongodb", "backup", "minio"],
 )
 
-# -------------------- HELPERS --------------------
+# HELPERS
 def list_backup_dates():
-    objs = minio_client.list_objects(MINIO_BUCKET, recursive=True)
+    objs = minio_client.list_objects(MINIO_BACKUP_BUCKET, recursive=True)
     return sorted(set(o.object_name.split("/")[0] for o in objs))
 
-# -------------------- TASKS --------------------
-def full_backup(**context):
+# TASKS 
+def full_backup_function(**context):
+    print(f"[BACKUP] Starting full backup for DB={MONGO_DB}")
     backup_date = datetime.now().strftime("%Y%m%d")
     backup_path = os.path.join(BACKUP_DIR, backup_date)
 
@@ -73,129 +73,137 @@ def full_backup(**context):
         f'--out="{backup_path}"'
     )
     subprocess.run(cmd, shell=True, check=True)
+    
+    print(f"[BACKUP] mongodump finished. Local path: {backup_path}")
 
     for root, _, files in os.walk(backup_path):
         for file in files:
             local_path = os.path.join(root, file)
             rel_path = os.path.relpath(local_path, backup_path)
             minio_client.fput_object(
-                MINIO_BUCKET,
+                MINIO_BACKUP_BUCKET,
                 f"{backup_date}/{rel_path}",
                 local_path,
             )
+            
+    print(f"[BACKUP] Backup uploaded to MinIO. Date={backup_date}")
 
     context["ti"].xcom_push(key="backup_date", value=backup_date)
 
-def validate_backup(**context):
+def restore_function(**context):
     backup_date = context["ti"].xcom_pull(key="backup_date")
     local_backup_path = os.path.join(BACKUP_DIR, backup_date)
-
-    client = MongoClient(MONGO_URI)
-    source_db = client[MONGO_DB]
-    restore_db = client[RESTORE_DB]
-
-    print(f"Clearing existing collections in {RESTORE_DB} before restore...")
-    for col in restore_db.list_collection_names():
-        restore_db.drop_collection(col)
-
-    # if TMP_RESTORE_DB in client.list_database_names():
-    #     client.drop_database(TMP_RESTORE_DB) # خط حذف دیتابیس حذف شد
-
-    # به‌روزرسانی دستور mongorestore برای استفاده از RESTORE_DB
+    
+    if not os.path.exists(local_backup_path):
+        raise AirflowFailException("Local backup path does not exist")
+    
+    dump_db_path = os.path.join(local_backup_path, MONGO_DB)
+    
+    print(f"[RESTORE] Restoring from: {dump_db_path}")
+    print(f"[RESTORE] Target DB: {MONGO_DB_RESTORE}")
+    
     cmd = (
         f'{mongorestore_bin} '
-        f'--uri="{MONGO_URI}" '
+        f'--uri="{MONGO_URI_RESTORE}" '
         f'--gzip '
+        f'--drop '
         f'--nsFrom="{MONGO_DB}.*" '
-        f'--nsTo="{RESTORE_DB}.*" '
-        f'"{local_backup_path}"'
+        f'--nsTo="{MONGO_DB_RESTORE}.*" '
+        f'"{dump_db_path}"'
     )
 
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    
     if result.returncode != 0:
-        raise AirflowFailException(result.stderr)
+        raise AirflowFailException(f"mongorestore failed:\n{result.stderr}")
 
-    restored_db = client[RESTORE_DB]
+    print(f"[RESTORE] mongorestore completed successfully")
+
+
+def validate_function(**context):
+
+    # Mongo clients 
+    client_source = MongoClient(MONGO_URI , serverSelectionTimeoutMS=5000)
+    source_db = client_source[MONGO_DB]
+
+    client_restore = MongoClient(MONGO_URI_RESTORE, serverSelectionTimeoutMS=5000)
+    restore_db = client_restore[MONGO_DB_RESTORE]
 
     src_cols = set(source_db.list_collection_names())
-    restored_cols = set(restored_db.list_collection_names())
+    restored_cols = set(restore_db.list_collection_names())
 
-    if src_cols != restored_cols:
-        raise AirflowFailException("Collection count mismatch")
+    print(f"[VALIDATE] Source collections: {len(src_cols)}")
+    print(f"[VALIDATE] Restored collections: {len(restored_cols)}")
+
+    if not restored_cols:
+        raise AirflowFailException("Restore DB is empty after restore")
+
+    ignore = {"system.profile"}
+    if src_cols - ignore != restored_cols - ignore:
+        raise AirflowFailException(
+            f"Collection mismatch. "
+            f"source={len(src_cols)} restored={len(restored_cols)}"
+        )
 
     for col in restored_cols:
-        if restored_db[col].count_documents({}) < 1:
-            raise AirflowFailException(f"Collection {col} is empty")
+        print(f"[VALIDATE] Checking collection: {col}")
+        if restore_db[col].find_one() is None:
+            raise AirflowFailException(f"{col} is empty after restore")
 
-# def validate_backup(**context):
-#     backup_date = context["ti"].xcom_pull(key="backup_date")
-#     backup_path = os.path.join(BACKUP_DIR, backup_date)
+    client_source.close()
+    client_restore.close()
+    
+    print(
+        f"Validation successful: "
+        f"{len(restored_cols)} collections restored correctly."
+    )
 
-#     if not os.path.exists(backup_path):
-#         raise AirflowFailException("Backup path does not exist")
-
-#     files = []
-#     for root, _, fs in os.walk(backup_path):
-#         for f in fs:
-#             files.append(os.path.join(root, f))
-
-#     if not files:
-#         raise AirflowFailException("Backup directory is empty")
-
-#     bson_files = [f for f in files if f.endswith(".bson.gz")]
-#     meta_files = [f for f in files if f.endswith(".metadata.json.gz")]
-
-#     if not bson_files:
-#         raise AirflowFailException("No .bson.gz files found")
-
-#     if not meta_files:
-#         raise AirflowFailException("No metadata (.metadata.json.gz) files found")
-
-#     for f in bson_files[:3]: 
-#         try:
-#             with gzip.open(f, "rb") as g:
-#                 g.read(1024)
-#         except Exception:
-#             raise AirflowFailException(f"Corrupted gzip file: {f}")
-
-#     print(
-#         f"Validation passed: "
-#         f"{len(bson_files)} bson files, "
-#         f"{len(meta_files)} metadata files"
-#     )
-
-def cleanup_task(**context):
+def cleanup_function(**context):
     backup_date = context["ti"].xcom_pull(key="backup_date")
+    
+    print(f"[CLEANUP] Removing local backup for date={backup_date}")
 
     # cleanup local
-    subprocess.run(f"rm -rf {BACKUP_DIR}/*", shell=True)
+    if BACKUP_DIR and BACKUP_DIR != "/":
+        subprocess.run(
+            ["rm", "-rf", os.path.join(BACKUP_DIR, backup_date)],
+            check=True
+        )
 
     # keep only last 3 backups in MinIO
     dates = list_backup_dates()
+    print(f"[CLEANUP] Keeping last 3 backups. Current backups: {dates}")
     while len(dates) > 3:
         oldest = dates.pop(0)
+        print(f"[CLEANUP] Removing old backup from MinIO: {oldest}")
         for obj in minio_client.list_objects(
-            MINIO_BUCKET, prefix=f"{oldest}/", recursive=True
+            MINIO_BACKUP_BUCKET, prefix=f"{oldest}/", recursive=True
         ):
-            minio_client.remove_object(MINIO_BUCKET, obj.object_name)
+            minio_client.remove_object(MINIO_BACKUP_BUCKET, obj.object_name)
 
-# -------------------- OPERATORS --------------------
-backup_task = PythonOperator(
-    task_id="full_backup",
-    python_callable=full_backup,
+# OPERATORS 
+full_backup_task = PythonOperator(
+    task_id="backup_task",
+    python_callable=full_backup_function,
+    dag=dag,
+)
+
+restore_task = PythonOperator(
+    task_id="restore_task",
+    python_callable=restore_function,
     dag=dag,
 )
 
 validate_task = PythonOperator(
-    task_id="validate_backup",
-    python_callable=validate_backup,
+    task_id="validate_task",
+    python_callable=validate_function,
     dag=dag,
 )
 
 cleanup_task = PythonOperator(
     task_id="cleanup_task",
-    python_callable=cleanup_task,
+    python_callable=cleanup_function,
     dag=dag,
 )
 
-backup_task >> validate_task >> cleanup_task
+full_backup_task >> restore_task >>validate_task >> cleanup_task

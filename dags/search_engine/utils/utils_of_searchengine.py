@@ -2,8 +2,8 @@ from utils.config import config
 import pymssql
 from datetime import datetime
 
-ENDPOINT_UPDATE_ALL = f"{config['search_endpoint_url']}/update-all-properties"
-ENDPOINT_HEALTH = f"{config['search_endpoint_url']}/health"
+ENDPOINT_UPDATE_ALL = f"{config['search_engine_endpoint_url']}/update-all-properties"
+ENDPOINT_HEALTH = f"{config['search_engine_endpoint_url']}/health"
 BATCH_SIZE = 200
 
 DB_CONFIG = {
