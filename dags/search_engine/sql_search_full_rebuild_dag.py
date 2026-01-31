@@ -1,12 +1,19 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
-import pytz
 import requests
 import logging
 from utils.config import config
 
-from search_engine.utils.utils_of_searchengine import get_cursor, safe_int, age_to_build_year, normalize_property_type
+from search_engine.utils.utils_of_searchengine import (
+    get_db_cursor,
+    normalize_property_type,
+    safe_int,
+    age_to_build_year,
+    send_batches,
+    iran_datetime_to_utc_iso,
+    check_search_health,
+)
 
 # config
 ENDPOINT_UPDATE_ALL = f"{config['search_engine_endpoint_url']}/update-all-properties"
@@ -101,168 +108,63 @@ ON d.Id = p.DepositId
 LEFT JOIN MinUserRole ur ON d.UserId = ur.UserId
 ORDER BY d.Id DESC;
 """
-
-def health_check_function(**context):
-    try:
-        response = requests.get(ENDPOINT_HEALTH, timeout=30)
-        if response.status_code == 200:
-            logging.info("Search service health check passed | status=%s", response.status_code)
-            return
-        else:
-            logging.error(
-                "Health check failed | status=%s | response=%s",
-                response.status_code,
-                response.text,
-            )
-            raise RuntimeError("Search service health check failed")
-    except Exception as e:
-        logging.error("Health check connection failed: %s", str(e))
-        raise
     
 def extract_function(ti, **context):
-    
-    health_check_function()
-    
-    conn, cursor = get_cursor()
-    try:
-        logging.info("Executing SQL query...")
+    check_search_health(ENDPOINT_HEALTH)
+    with get_db_cursor() as cursor:
         cursor.execute(QUERY)
         logging.info("SQL query executed")
         rows = cursor.fetchall()
-        row_count = len(rows)
         
-        logging.info("Extracted %s rows from database", row_count)
-        
-        ti.xcom_push(key="extracted_rows", value=rows)
-        ti.xcom_push(key="extracted_count", value=row_count)
-        
-        return None
-    finally:
-        conn.close()
+    logging.info(f"Extracted {len(rows)} rows")
+    ti.xcom_push(key="raw_rows", value=rows)
 
 def transform_function(ti, **context):
-    rows = ti.xcom_pull(task_ids="extract_task", key="extracted_rows")
+    rows = ti.xcom_pull(task_ids="extract_task", key="raw_rows")
     if not rows:
         logging.warning("No rows to transform")
-        ti.xcom_push(key="transformed_properties", value=[])
-        ti.xcom_push(key="transformed_count", value=0)
-        return None
+        ti.xcom_push(key="transformed_rows", value=[])
+        return
 
-    tehran_tz = pytz.timezone("Asia/Tehran")
     transformed = []
     
     for row in rows:
         row_dict = dict(row)
-        
-        normalized_property_type = normalize_property_type(row_dict.get("PropertyTypeId"))
-        if normalized_property_type is None:
-            continue
-        
-        db_modified = row_dict.get("ModifiedDate")
-        if db_modified:
-            iran_dt = tehran_tz.localize(db_modified)
-            utc_dt = iran_dt.astimezone(pytz.UTC)
-            modified_date_utc = utc_dt.isoformat()
-        else:
-            modified_date_utc = None
-            
-        db_created = row_dict.get("CreatedTime")
-        if db_created:
-            iran_dt = tehran_tz.localize(db_created)
-            utc_dt = iran_dt.astimezone(pytz.UTC)
-            created_time_utc = utc_dt.isoformat()
-        else:
-            created_time_utc = None
-            
-        build_year = age_to_build_year(safe_int(row_dict.get("age")))
+        prop_type = normalize_property_type(row_dict.get("PropertyTypeId"))
+        if not prop_type:
 
-        api_row = {
+            continue
+
+        transformed.append({
             "id": int(row_dict.get("Id")),
-            "property_type": normalized_property_type,
-            "deposit_category": str(row_dict.get("DepositCategoryId") or ""), 
-            "user_role_id":int(row_dict.get("UserId") or 13),
+            "property_type": prop_type,
+            "deposit_category": str(row_dict.get("DepositCategoryId") or ""),
+            "user_role_id": int(row_dict.get("UserId") or 13),
             "city_id": int(row_dict.get("CityId") or 0),
             "title": str(row_dict.get("Title") or ""),
-            "created_time": created_time_utc,
-            "modified_time": modified_date_utc,
+            "created_time": iran_datetime_to_utc_iso(row_dict.get("CreatedTime")),
+            "modified_time": iran_datetime_to_utc_iso(row_dict.get("ModifiedDate")),
             "region": str(row_dict.get("RegionId") or ""),
             "price": int(row_dict.get("Price") or 0),
             "rental_price": int(row_dict.get("RentalPrice") or 0),
             "meter": safe_int(row_dict.get("meter")),
             "floor": str(row_dict.get("floor") or ""),
             "rooms": str(row_dict.get("rooms") or ""),
-            "age": build_year ,
+            "age": age_to_build_year(safe_int(row_dict.get("age"))),
             "parking": bool(row_dict.get("parking")),
             "warehouse": bool(row_dict.get("warehouse")),
             "elevator": bool(row_dict.get("elevator")),
             "loan": bool(row_dict.get("loan")),
             "description": str(row_dict.get("Description") or ""),
-            "status": "active" ,
-        }
+            "status": "active",
+        })
 
-        transformed.append(api_row)
-        
-    logging.info(f"Transformed {len(transformed)} records")
-    
-    ti.xcom_push(key="transformed_properties", value=transformed)
-    ti.xcom_push(key="transformed_count", value=len(transformed))
-    
-    return None
+    logging.info(f"Transformed {len(transformed)} rows")
+    ti.xcom_push(key="transformed_rows", value=transformed)
 
 def load_function(ti, **context):
-    properties = ti.xcom_pull(task_ids="transform_task", key="transformed_properties")
-    
-    if not properties:
-        logging.warning("No data to send")
-        return
-
-    total = len(properties)
-    successful_batches = 0
-    total_batches = (total - 1) // BATCH_SIZE + 1
-
-    logging.info("Total batch count = %s",total_batches)
-
-    for i in range(0, total, BATCH_SIZE):
-        batch = properties[i:i + BATCH_SIZE]
-        batch_num = i // BATCH_SIZE + 1
-        batch_count = len(batch)
-
-        logging.info("Sending batch %s/%s", batch_num, total_batches)
-
-        try:
-            response = requests.post(
-                ENDPOINT_UPDATE_ALL,
-                json={
-                    "properties": batch,
-                    "batch_number": batch_num,
-                    "total_batches":total_batches
-                },
-                headers = {
-                    "Authorization": f"Bearer {config["search_engine_access_token"]}",
-                    "accept": "/"
-                },
-                timeout=180, 
-            )
-
-            if response.ok:
-                logging.info("Batch %s sent successfully | count=%s | status=%s",
-                             batch_num, batch_count, response.status_code)
-                successful_batches += 1
-                data = response.json()
-                logging.info(f"(response) added count: {data.get('added_count')}")    
-                logging.info(f"(response) message : {data.get('message')}") 
-                
-            else:
-                logging.error("Batch %s failed | status=%s | response=%s",
-                              batch_num, response.status_code, response.text)
-                response.raise_for_status()  # fail 
-                
-        except requests.exceptions.RequestException as e:
-            logging.error("Batch %s request failed: %s", batch_num, str(e))
-            raise  # fail 
-
-    logging.info("All batches completed | Total sent: %s properties in %s batches",
-                 total, successful_batches)
+    rows = ti.xcom_pull(task_ids="transform_task", key="transformed_rows")
+    send_batches(endpoint=ENDPOINT_UPDATE_ALL, items=rows, batch_size=BATCH_SIZE)
 
 # DAG
 with DAG(
@@ -271,7 +173,7 @@ with DAG(
     schedule_interval="0 0 * * *",
     catchup=False,
     max_active_runs=1,
-    tags=["search-engine", "db-update", "nightly"],
+    tags=["search-engine", "full-rebuild", "nightly"],
 ) as dag:
     
     extract_task = PythonOperator(
