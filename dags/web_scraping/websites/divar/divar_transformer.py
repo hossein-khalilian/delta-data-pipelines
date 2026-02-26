@@ -364,10 +364,13 @@ def transform_data(data: dict) -> dict:
                 value = item.get("value", "")
                 if "اتاق" in title:
                     doc["rooms_count"] = value
-                    
                     # تبدیل "بدون اتاق" → 0
                     if doc["rooms_count"] == "بدون اتاق":
                         doc["rooms_count"] = "0"
+                    
+                    # +۴ → ۵
+                    if doc["rooms_count"] == "+۴":
+                        doc["rooms_count"] = "5"
                     
                     break
             
@@ -398,7 +401,7 @@ def transform_data(data: dict) -> dict:
         txt = persian_to_english_digits(doc["unit_per_floor"])
         match = re.search(r"بیشتر از\s*(\d+)", txt)
         if match:
-            doc["unit_per_floor"] = "+" + match.group(1)
+            doc["unit_per_floor"] = str(int(match.group(1)) + 1)
 
     features_map = {
         "آسانسور": "has_elevator",
@@ -623,9 +626,13 @@ def transform_data(data: dict) -> dict:
             val_str = persian_to_english_digits(str(val))
             val_str = re.sub(r"[^\d\.\+\-]", "", val_str)
             try:
-                doc[f] = float(val_str)
+                if f in ["floor", "rooms_count", "total_floors_count", "unit_per_floor"]:
+                    doc[f] = int(val_str) if val_str else None
+                elif f == "price_value":
+                    doc[f] = int(val_str) if val_str else None   
+                else:
+                    doc[f] = float(val_str)
             except:
                 doc[f] = None
 
     return doc
-

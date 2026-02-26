@@ -21,7 +21,7 @@ EXCLUDED_FIELDS = [
     '_id', 'created_at', 'content_url', 'images',
     'location_radius', 'credit_value', 'has_security_guard', 'has_barbecue',
     'has_pool', 'has_jacuzzi', 'has_business_deed', 'has_sauna',
-    'land_size', 'transformed_rent', 'transformable_rent',
+    'transformed_rent', 'transformable_rent',
     'transformable_credit', 'transformable_price', 'rent_credit_transform',
     'transformed_credit', 'credit_mode', 'rent_mode',
     'rent_price_at_weekends', 'rent_price_on_special_days',

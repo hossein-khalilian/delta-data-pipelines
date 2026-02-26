@@ -3,7 +3,7 @@ curl 'https://api.divar.ir/v8/postlist/w/search' \
   -X POST \
   --data-raw '{
     "city_ids": [
-      "1","2","3","4","5","6","7","8","9","10","11","12","22"
+      "1","2","3","4","5","6","7","8","9","10","11","12","22","1763"
     ],
     "pagination_data": {
       "@type": "type.googleapis.com/post_list.PaginationData",
